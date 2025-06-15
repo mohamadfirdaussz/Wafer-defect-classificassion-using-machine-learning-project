@@ -4,8 +4,8 @@ import random # For setting seeds if needed by specific libraries or for reprodu
 
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.ensemble import RandomForestClassifier
-# from sklearn.svm import SVC # Example if you wanted to tune SVM
-# from sklearn.linear_model import LogisticRegression # Example for LR
+from sklearn.svm import SVC # Example if you wanted to tune SVM
+from sklearn.linear_model import LogisticRegression # Example for LR
 
 # Helper to decode labels if they are one-hot encoded, as GridSearchCV expects 1D y
 def _decode_if_one_hot(y_labels):
@@ -121,20 +121,20 @@ def tune_random_forest_hyperparameters_random(X_train, y_train, param_distributi
 
 
 # --- Placeholder for other model tuning (e.g., SVM) ---
-# def tune_svm_hyperparameters_grid(X_train, y_train, param_grid, cv_folds=3, scoring='accuracy', random_state_tune=42, n_jobs=-1, verbose=1):
-#     y_train_1d = _decode_if_one_hot(y_train)
-#     print(f"Starting GridSearchCV for SVC with {cv_folds}-fold CV.")
-#     svm_for_tuning = SVC(random_state=random_state_tune, probability=True) # probability=True if needed for some scores
-#     try:
-#         grid_search_svm = GridSearchCV(estimator=svm_for_tuning, param_grid=param_grid, cv=cv_folds, scoring=scoring, n_jobs=n_jobs, verbose=verbose)
-#         grid_search_svm.fit(X_train, y_train_1d)
-#         print("\nGridSearchCV for SVC Complete.")
-#         print(f"Best Score ({scoring}): {grid_search_svm.best_score_:.4f}")
-#         print(f"Best Hyperparameters: {grid_search_svm.best_params_}")
-#         return grid_search_svm.best_params_, grid_search_svm.best_estimator_
-#     except Exception as e:
-#         print(f"An error occurred during GridSearchCV for SVM: {e}")
-#         return None, None
+def tune_svm_hyperparameters_grid(X_train, y_train, param_grid, cv_folds=3, scoring='accuracy', random_state_tune=42, n_jobs=-1, verbose=1):
+    y_train_1d = _decode_if_one_hot(y_train)
+    print(f"Starting GridSearchCV for SVC with {cv_folds}-fold CV.")
+    svm_for_tuning = SVC(random_state=random_state_tune, probability=True) # probability=True if needed for some scores
+    try:
+        grid_search_svm = GridSearchCV(estimator=svm_for_tuning, param_grid=param_grid, cv=cv_folds, scoring=scoring, n_jobs=n_jobs, verbose=verbose)
+        grid_search_svm.fit(X_train, y_train_1d)
+        print("\nGridSearchCV for SVC Complete.")
+        print(f"Best Score ({scoring}): {grid_search_svm.best_score_:.4f}")
+        print(f"Best Hyperparameters: {grid_search_svm.best_params_}")
+        return grid_search_svm.best_params_, grid_search_svm.best_estimator_
+    except Exception as e:
+        print(f"An error occurred during GridSearchCV for SVM: {e}")
+        return None, None
 
 
 if __name__ == '__main__':
@@ -195,19 +195,19 @@ if __name__ == '__main__':
 
 
     # Example placeholder for SVM tuning
-    # print("\n--- Example: SVM GridSearchCV (Placeholder) ---")
-    # svm_param_grid_example = {
-    #     'C': [0.1, 1, 10],
-    #     'kernel': ['linear', 'rbf'],
-    #     'gamma': ['scale', 'auto', 0.1] # Only for rbf, poly, sigmoid kernels
-    # }
-    # # Note: SVC can be slow to tune, especially with RBF kernel and large datasets.
-    # # best_svm_params, best_svm_estimator = tune_svm_hyperparameters_grid(
-    # #     X_dummy_tune, y_dummy_tune,
-    # #     param_grid=svm_param_grid_example,
-    # #     cv_folds=2, verbose=1
-    # # )
-    # # if best_svm_params:
-    # #     print("\nSVM Grid Search returned - Best Params:", best_svm_params)
+    print("\n--- Example: SVM GridSearchCV (Placeholder) ---")
+    svm_param_grid_example = {
+        'C': [0.1, 1, 10],
+        'kernel': ['linear', 'rbf'],
+        'gamma': ['scale', 'auto', 0.1] # Only for rbf, poly, sigmoid kernels
+    }
+    # Note: SVC can be slow to tune, especially with RBF kernel and large datasets.
+    # best_svm_params, best_svm_estimator = tune_svm_hyperparameters_grid(
+    #     X_dummy_tune, y_dummy_tune,
+    #     param_grid=svm_param_grid_example,
+    #     cv_folds=2, verbose=1
+    # )
+    # if best_svm_params:
+    #     print("\nSVM Grid Search returned - Best Params:", best_svm_params)
 
     print("\nParameter tuner example run complete.")
