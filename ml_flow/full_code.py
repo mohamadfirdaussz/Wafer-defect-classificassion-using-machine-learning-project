@@ -14,13 +14,11 @@
 # Image(url= "https://www.disco.co.jp/eg/introduction/img/what_pc.png", width=600)
 
 # Read data file
-
 import pandas as pd
 
 
 # Commented out IPython magic to ensure Python compatibility.
 # Import libraries
-
 import matplotlib.pyplot as plt
 df = pd.read_pickle("C:/Users/user/Desktop/fyp/LSWMD.pkl/LSWMD.pkl")
 df.info()
@@ -29,17 +27,14 @@ import numpy as np
 import random
 
 # Show sample of dataset
-
 df.head()
 
 # Correct columns
-
 df.rename(columns={'trianTestLabel':'trainTestLabel'}, inplace=True)
 df.waferIndex = df.waferIndex.astype(int)
 df.tail()
 
 # Visualize wafer index distribution
-
 uni_Index = np.unique(df.waferIndex, return_counts=True)
 plt.bar(uni_Index[0],uni_Index[1], color='gold', align='center', alpha=0.5)
 plt.title("Wafer Index Distribution")
@@ -50,11 +45,9 @@ plt.ylim(30000,34000)
 plt.show()
 
 # Drop column for wafer index
-
 df = df.drop(['waferIndex'], axis = 1)
 
 # Add column for wafer map dimension
-
 def find_dim(x):
     dim0=np.size(x,axis=0)
     dim1=np.size(x,axis=1)
@@ -63,25 +56,21 @@ df['waferMapDim']=df.waferMap.apply(find_dim)
 df.sample(5)
 
 # Wafer dimension distribution
-
 #max(df.waferMapDim), min(df.waferMapDim)
 uni_waferDim=np.unique(df.waferMapDim, return_counts=True)
 #uni_waferDim[0].shape[0]
 df['waferMapDim'].value_counts(normalize = True)
 
 # Dataframe memory usage
-
 df.memory_usage(deep = True)  # memory usage in bytes
 
 # Create a copy of dataset
-
 df2 = df.copy()
 df2.failureType = df2.failureType.apply(lambda x: x[0][0] if len(x) > 0 else float("NaN"))
 df2.trainTestLabel = df2.trainTestLabel.apply(lambda x: x[0][0] if len(x) > 0 else float("NaN"))
 df2.sample()
 
 # Check new dataset memory usage
-
 df2.memory_usage(deep = True)
 
 # Cast categorical columns
@@ -91,7 +80,6 @@ df2['failureType'] = df2['failureType'].astype('category')
 df2.memory_usage(deep = True)
 
 # Check falure type distribution
-
 df2['failureType'].value_counts(normalize=True).plot.pie(
     startangle=90, cmap="tab10", figsize=(8, 8), title="Failure Type Distribution"
 )
@@ -99,16 +87,13 @@ df2['failureType'].value_counts(normalize=True).plot.pie(
 plt.show()
 
 # Check failure type distribution of wafers with non-null labels
-
 #df2['failureType'].value_counts().plot.bar()
 df2['failureType'].value_counts()
 
 # Check total number of images with non-null labels
-
 df2['failureType'].value_counts().sum()
 
 # Delete unlabeled data and "near-full" type
-
 import numpy as np
 
 # Convert categorical to string to avoid errors
@@ -139,7 +124,6 @@ num_rows = df2.shape[0]
 print(num_rows)
 
 # Generate new dataset with balanced classes
-
 random.seed(10)  # Set seed for reproducibility
 failure_types = list(df2['failureType'].cat.categories)  # Get unique failure types
 num_cat = len(failure_types)
@@ -883,7 +867,6 @@ bestF = gridF.fit(X_train, y_train)  # Ensure X_train and y_train are properly d
 print("Best Hyperparameters:", gridF.best_params_)
 
 # Look at the best parameters
-
 best = gridF.best_params_
 print(best)
 
@@ -912,7 +895,6 @@ scores = cross_val_score(RF, X_test, y_test, cv=10, scoring='accuracy')
 print(f"Accuracy score for Random Forest Classifier: {scores.mean():.4f}")
 
 # Compute confusion matrix
-
 cnf_matrix = confusion_matrix(y_test, y_test_pred)
 np.set_printoptions(precision=2)
 
@@ -921,12 +903,10 @@ fig = plt.figure(figsize=(15, 8))
 gs = gridspec.GridSpec(1, 2, width_ratios=[1, 1])
 
 ## Plot non-normalized confusion matrix
-
 plt.subplot(gs[0])
 plot_confusion_matrix(cnf_matrix, title='Confusion matrix')
 
 # Plot normalized confusion matrix
-
 plt.subplot(gs[1])
 plot_confusion_matrix(cnf_matrix, normalize=True, title='Normalized confusion matrix')
 
