@@ -18,85 +18,124 @@ import pandas as pd
 
 
 # Commented out IPython magic to ensure Python compatibility.
+# === LOAD AND INSPECT WAFER MAP DATA ===
+
 # Import libraries
+import pandas as pd
 import matplotlib.pyplot as plt
-df = pd.read_pickle("C:/Users/user/Desktop/fyp/LSWMD.pkl/LSWMD.pkl")
-df.info()
 import numpy as np
-# %matplotlib inline
 import random
 
-# Show sample of dataset
+# Load wafer map dataset from a pickle file (binary format used to store Python objects)
+df = pd.read_pickle("C:/Users/user/Desktop/fyp/LSWMD.pkl/LSWMD.pkl")
+
+# Show basic information about the dataframe (column names, data types, non-null counts)
+df.info()
+
+# Show the first few rows of the dataset to understand the structure
 df.head()
 
-# Correct columns
+# === DATA CLEANING ===
+
+# Fix column name typo: 'trianTestLabel' → 'trainTestLabel'
 df.rename(columns={'trianTestLabel':'trainTestLabel'}, inplace=True)
+
+# Convert 'waferIndex' from float to integer for consistency
 df.waferIndex = df.waferIndex.astype(int)
+
+# Show the last few rows to verify changes
 df.tail()
 
-# Visualize wafer index distribution
+# === VISUALIZATION: Wafer Index Distribution ===
+
+# Count how many times each wafer index appears
 uni_Index = np.unique(df.waferIndex, return_counts=True)
-plt.bar(uni_Index[0],uni_Index[1], color='gold', align='center', alpha=0.5)
+
+# Plot the distribution of wafer indices
+plt.bar(uni_Index[0], uni_Index[1], color='gold', align='center', alpha=0.5)
 plt.title("Wafer Index Distribution")
 plt.xlabel("Wafer Index")
 plt.ylabel("Frequency")
-plt.xlim(0,26)
-plt.ylim(30000,34000)
+plt.xlim(0, 26)
+plt.ylim(30000, 34000)
 plt.show()
 
-# Drop column for wafer index
-df = df.drop(['waferIndex'], axis = 1)
+# Drop wafer index column since it's no longer needed
+df = df.drop(['waferIndex'], axis=1)
 
-# Add column for wafer map dimension
+# === ADD NEW COLUMN: Wafer Map Dimensions ===
+
+# Function to get dimensions of each waferMap (assumes each is a 2D numpy array)
 def find_dim(x):
-    dim0=np.size(x,axis=0)
-    dim1=np.size(x,axis=1)
-    return dim0,dim1
-df['waferMapDim']=df.waferMap.apply(find_dim)
+    dim0 = np.size(x, axis=0)
+    dim1 = np.size(x, axis=1)
+    return dim0, dim1
+
+# Apply the function to all wafer maps and create a new column
+df['waferMapDim'] = df.waferMap.apply(find_dim)
+
+# Show sample rows with new dimension column
 df.sample(5)
 
-# Wafer dimension distribution
-#max(df.waferMapDim), min(df.waferMapDim)
-uni_waferDim=np.unique(df.waferMapDim, return_counts=True)
-#uni_waferDim[0].shape[0]
-df['waferMapDim'].value_counts(normalize = True)
+# === INSPECT WAFER MAP SIZE DISTRIBUTION ===
 
-# Dataframe memory usage
-df.memory_usage(deep = True)  # memory usage in bytes
+# Count frequency of each unique wafer map dimension
+uni_waferDim = np.unique(df.waferMapDim, return_counts=True)
 
-# Create a copy of dataset
+# Alternatively, check distribution as a percentage
+df['waferMapDim'].value_counts(normalize=True)
+
+# === MEMORY USAGE ANALYSIS ===
+
+# Check how much memory the DataFrame uses
+df.memory_usage(deep=True)
+
+# === CLEAN LABEL FORMATTING AND DUPLICATION HANDLING ===
+
+# Create a copy to work on cleaned labels
 df2 = df.copy()
+
+# Clean 'failureType': keep only the first inner string (e.g., [['Center']] → 'Center')
 df2.failureType = df2.failureType.apply(lambda x: x[0][0] if len(x) > 0 else float("NaN"))
+
+# Clean 'trainTestLabel': same process
 df2.trainTestLabel = df2.trainTestLabel.apply(lambda x: x[0][0] if len(x) > 0 else float("NaN"))
+
+# View sample after cleaning
 df2.sample()
 
-# Check new dataset memory usage
-df2.memory_usage(deep = True)
+# Check memory usage after label simplification
+df2.memory_usage(deep=True)
 
-# Cast categorical columns
+# === CONVERT LABELS TO CATEGORICAL TYPE ===
 
+# Use pandas 'category' data type to save memory and improve performance
 df2['trainTestLabel'] = df2['trainTestLabel'].astype('category')
 df2['failureType'] = df2['failureType'].astype('category')
-df2.memory_usage(deep = True)
 
-# Check falure type distribution
+# Check memory usage again after conversion
+df2.memory_usage(deep=True)
+
+# === VISUALIZE FAILURE TYPES ===
+
+# Pie chart of failure type distribution (proportions)
 df2['failureType'].value_counts(normalize=True).plot.pie(
     startangle=90, cmap="tab10", figsize=(8, 8), title="Failure Type Distribution"
 )
-
 plt.show()
 
-# Check failure type distribution of wafers with non-null labels
-#df2['failureType'].value_counts().plot.bar()
+# Bar chart (optional, commented out)
+# df2['failureType'].value_counts().plot.bar()
+
+# Print failure type counts
 df2['failureType'].value_counts()
 
-# Check total number of images with non-null labels
+# Show total number of labeled (non-null) images
 df2['failureType'].value_counts().sum()
 
-# Delete unlabeled data and "near-full" type
-import numpy as np
+# === PREP FOR FILTERING ===
 
-# Convert categorical to string to avoid errors
+# Before filtering, convert categories to strings to make conditional filtering easier
 df2['failureType'] = df2['failureType'].astype(str)
 df2['trainTestLabel'] = df2['trainTestLabel'].astype(str)
 
