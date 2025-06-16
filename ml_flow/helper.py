@@ -1,6 +1,8 @@
 # === FILENAME: helper.py ===
 import numpy as np
 import matplotlib.pyplot as plt
+import random
+import pandas as pd
 import itertools # For plot_confusion_matrix
 from sklearn.metrics import confusion_matrix # For plot_confusion_matrix
 
