@@ -176,6 +176,3 @@ IntelliJ IDEA provides excellent support for running Python unit tests (e.g., `u
 
 Contributions are welcome! Please follow standard Git practices: fork, branch, commit, and create a Pull Request. Ensure code style consistency and add/update unit tests for your changes.
 
-## License
-
-This project is typically licensed under the MIT License if a `LICENSE` file is present. If not, please consult the original author regarding usage rights.

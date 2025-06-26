@@ -1,26 +1,19 @@
-
-# === Install All Dependencies ===
-# Run the following command in your terminal:
+# === Wafer Defect Classification Project Requirements ===
+#
+# This file lists the core Python dependencies for the project.
+# To install them, activate your virtual environment and run:
 #
 # pip install -r requirements.txt
 #
-# Make sure your virtual environment is activated before running the command.
 
-# === Core Dependencies ===
-tensorflow
-pandas
-scikit-learn
+# Core Data Science and Machine Learning Libraries
 matplotlib
 numpy
 pandas
-numpy
-matplotlib
-scipy
 scikit-image
 scikit-learn
+scipy
 tensorflow
+
+# Optional for interactive development and specific notebook features
 ipython
-
-
-
-
