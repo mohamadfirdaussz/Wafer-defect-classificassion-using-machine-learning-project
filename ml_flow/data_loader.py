@@ -1,48 +1,97 @@
-# === FILENAME: data_loader.py ===
+# data_loader.py
 
+import os
+import numpy as np
 import pandas as pd
-def load_wafer_data(file_path):
+from sklearn.preprocessing import MinMaxScaler
+
+
+class WaferDataLoader:
     """
-    Loads wafer data from a specified pickle (.pkl) file.
-
-    Args:
-        file_path (str): The full path to the .pkl data file.
-
-    Returns:
-        pandas.DataFrame: The loaded DataFrame if successful, or None if an error occurs.
+    Object-Oriented class for loading and preprocessing wafer defect data (CSV).
+    Handles missing values, normalization, reshaping, and optional noise filtering.
     """
 
-    try:
-        # Try to load the pickle file into a pandas DataFrame
-        df = pd.read_pickle(file_path)
-        print(f"Data loaded successfully from {file_path}")
-        return df
+    def __init__(self, dataset_path: str, normalize: bool = True, noise_filter: bool = False):
+        """
+        Initialize the loader with configuration options.
+        :param dataset_path: Path to the wafer dataset (.csv)
+        :param normalize: Whether to apply MinMax normalization
+        :param noise_filter: Whether to enable noise/invalid wafer cleaning
+        """
+        self.dataset_path = dataset_path
+        self.normalize = normalize
+        self.noise_filter = noise_filter
+        self.data = None
+        self.scaler = MinMaxScaler()
 
-    except FileNotFoundError:
-        # Handle case where the file path is invalid or file is missing
-        print(f"Error: The file was not found at {file_path}")
-        return None
+    def load_dataset(self) -> pd.DataFrame:
+        """Load the wafer dataset from CSV file."""
+        if not os.path.exists(self.dataset_path):
+            raise FileNotFoundError(f"Dataset not found at {self.dataset_path}")
 
-    except Exception as e:
-        # Catch any other exceptions during loading and print the error message
-        print(f"An error occurred while loading the data: {e}")
-        return None
+        self.data = pd.read_csv(self.dataset_path)
+        print(f"[INFO] Dataset loaded successfully: {len(self.data)} samples")
+        return self.data
 
-# Optional test code block: This only runs if the file is executed directly (not when imported)
-if __name__ == '__main__':
-    # Example file path – replace with your actual file path to test the loader
-    conceptual_file_path = "C:/Users/user/IdeaProjects/Projek-mcgogo/ml_flow/your_file_20rows.pkl"
+    def handle_missing_data(self) -> pd.DataFrame:
+        """Remove rows with missing or corrupted data."""
+        before = len(self.data)
+        self.data.dropna(inplace=True)
+        after = len(self.data)
+        print(f"[CLEAN] Removed {before - after} rows with missing values")
+        return self.data
 
-    # Try loading the data and print status
-    print(f"Attempting to load data from: {conceptual_file_path}")
-    wafer_df = load_wafer_data(conceptual_file_path)
+    def normalize_features(self) -> pd.DataFrame:
+        """
+        Apply MinMax normalization to numerical columns.
+        """
+        numeric_cols = self.data.select_dtypes(include=[np.number]).columns.tolist()
+        if not numeric_cols:
+            print("[WARN] No numeric columns found for normalization.")
+            return self.data
 
-    # If loading was successful, display DataFrame info and preview
-    if wafer_df is not None:
-        print("\nDataFrame Information:")
-        wafer_df.info()  # Show summary of DataFrame (columns, types, nulls, etc.)
+        self.data[numeric_cols] = self.scaler.fit_transform(self.data[numeric_cols])
+        print(f"[INFO] Normalized {len(numeric_cols)} numeric columns using MinMaxScaler")
+        return self.data
 
-        print("\nFirst 5 rows of the DataFrame:")
-        print(wafer_df.head())  # Show the first few rows for inspection
-    else:
-        print("\nFailed to load data.")  # Loading failed, already reported in function
+    def remove_noise(self) -> pd.DataFrame:
+        """
+        Optional: Remove noisy or invalid samples.
+        Example: remove rows where all numeric features are 0 or 1.
+        """
+        if not self.noise_filter:
+            return self.data
+
+        numeric_cols = self.data.select_dtypes(include=[np.number]).columns
+        before = len(self.data)
+        self.data = self.data[~self.data[numeric_cols].apply(lambda x: (x == 0).all() or (x == 1).all(), axis=1)]
+        after = len(self.data)
+        print(f"[FILTER] Removed {before - after} noisy or invalid rows")
+        return self.data
+
+    def process(self) -> pd.DataFrame:
+        """Execute the complete data ingestion and preprocessing pipeline."""
+        print("[STEP 1] Loading dataset...")
+        self.load_dataset()
+        print("[STEP 2] Handling missing or corrupted samples...")
+        self.handle_missing_data()
+        print("[STEP 3] Normalizing wafer feature columns...")
+        self.normalize_features()
+        if self.noise_filter:
+            print("[STEP 4] Removing noisy wafer samples...")
+            self.remove_noise()
+        print(f"[DONE] Preprocessing complete. Final samples: {len(self.data)}")
+        return self.data
+
+
+# Example usage
+if __name__ == "__main__":
+    loader = WaferDataLoader(
+        dataset_path=r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\LSWMD_1500.csv",
+        normalize=True,
+        noise_filter=True
+    )
+    processed_data = loader.process()
+    processed_data.to_csv(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\LSWMD_1500_preprocessed.csv", index=False)
+    print("[SAVE] Preprocessed dataset saved as LSWMD_1500_preprocessed.csv")
