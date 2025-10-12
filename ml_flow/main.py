@@ -8,7 +8,7 @@ from collections import Counter
 # Import custom modules
 from data_loader import load_wafer_data
 import data_processor
-import feature_selector # For feature names and importances
+import feature_engineering # For feature names and importances
 import helper # For plotting confusion matrices and other utilities
 import model_runner
 import parameter_tuner
