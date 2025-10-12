@@ -1,4 +1,4 @@
-# 🧠 SEMICONDUCTOR WAFER DEFECT CLASSIFICATION PIPELINE
+# SEMICONDUCTOR WAFER DEFECT CLASSIFICATION PIPELINE
 
 A modular end-to-end pipeline for **wafer defect classification** using traditional machine learning techniques.  
 The system performs **data ingestion**, **preprocessing**, **feature selection**, and **model training** with multiple classifiers and tuning strategies.
