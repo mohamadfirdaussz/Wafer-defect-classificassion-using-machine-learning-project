@@ -23,3 +23,18 @@ print(wafer_maps[0])
 # The accompanying .csv has all non-image metadata (lotName, failureType, etc.) synchronized with the same 1,296 samples.
 
 
+#✅ Tafsiran
+
+# Bentuk (1296, 26, 26)
+# Terdapat 1,296 sampel wafer.
+# Setiap peta wafer ialah matriks 26×26 (susun atur die).
+# Contoh peta wafer (seperti ditunjukkan):
+# Nilai 0, 1, 2 mewakili keadaan die yang berbeza:
+#
+# 0 → latar belakang / tiada die
+# 1 → die berfungsi
+# 2 → die rosak
+#
+# Maksudnya:
+# Fail .npz anda kini menyimpan setiap wafer sebagai array 26×26 yang telah dinormalisasi, sedia untuk proses pengekstrakan ciri (contohnya Radon, geometri, atau berdasarkan kawasan).
+# Fail .csv yang sepadan mengandungi semua metadata bukan imej (seperti lotName, failureType, dan lain-lain) yang diselaraskan dengan 1,296 sampel yang sama.
