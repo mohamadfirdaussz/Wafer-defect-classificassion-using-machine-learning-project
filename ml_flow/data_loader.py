@@ -8,16 +8,41 @@ from sklearn.preprocessing import MinMaxScaler
 
 class WaferDataLoader:
     """
-    Object-Oriented class for loading and preprocessing wafer defect data (CSV).
-    Handles missing values, normalization, reshaping, and optional noise filtering.
+    Loading and preprocessing semiconductor wafer defect data.
+    It performs data ingestion, cleaning, normalization, and optional noise removal.
+
+    Main responsibilities:
+    -----------------------
+    • Load dataset from CSV.
+    • Handle missing or corrupted data.
+    • Normalize numeric features using MinMaxScaler.
+    • Optionally filter out noisy or invalid wafer patterns.
+
+    Typical use:
+    ------------
+        loader = WaferDataLoader("dataset.csv", normalize=True, noise_filter=True)
+        clean_data = loader.process()
     """
 
     def __init__(self, dataset_path: str, normalize: bool = True, noise_filter: bool = False):
         """
-        Initialize the loader with configuration options.
-        :param dataset_path: Path to the wafer dataset (.csv)
-        :param normalize: Whether to apply MinMax normalization
-        :param noise_filter: Whether to enable noise/invalid wafer cleaning
+        Initialize the WaferDataLoader with dataset path and configuration options.
+
+        Parameters
+        ----------
+        dataset_path : str
+            File path to the wafer dataset in CSV format.
+        normalize : bool, default=True
+            Whether to apply MinMax scaling to numerical features.
+        noise_filter : bool, default=False
+            Whether to enable noise removal for invalid wafer samples.
+
+        Attributes
+        ----------
+        data : pd.DataFrame
+            Stores the loaded dataset.
+        scaler : MinMaxScaler
+            Scaler used for feature normalization.
         """
         self.dataset_path = dataset_path
         self.normalize = normalize
@@ -26,7 +51,18 @@ class WaferDataLoader:
         self.scaler = MinMaxScaler()
 
     def load_dataset(self) -> pd.DataFrame:
-        """Load the wafer dataset from CSV file."""
+        """
+        Load the wafer dataset from the provided CSV file path.
+
+        Returns
+        -------
+        pd.DataFrame
+            Loaded dataset.
+        Raises
+        ------
+        FileNotFoundError
+            If the specified dataset path does not exist.
+        """
         if not os.path.exists(self.dataset_path):
             raise FileNotFoundError(f"Dataset not found at {self.dataset_path}")
 
@@ -35,7 +71,14 @@ class WaferDataLoader:
         return self.data
 
     def handle_missing_data(self) -> pd.DataFrame:
-        """Remove rows with missing or corrupted data."""
+        """
+        Remove any rows containing missing or NaN values.
+
+        Returns
+        -------
+        pd.DataFrame
+            Cleaned dataset without missing data.
+        """
         before = len(self.data)
         self.data.dropna(inplace=True)
         after = len(self.data)
@@ -44,7 +87,12 @@ class WaferDataLoader:
 
     def normalize_features(self) -> pd.DataFrame:
         """
-        Apply MinMax normalization to numerical columns.
+        Apply MinMax normalization to all numerical feature columns.
+
+        Returns
+        -------
+        pd.DataFrame
+            Dataset with normalized numeric columns in the range [0, 1].
         """
         numeric_cols = self.data.select_dtypes(include=[np.number]).columns.tolist()
         if not numeric_cols:
@@ -57,8 +105,13 @@ class WaferDataLoader:
 
     def remove_noise(self) -> pd.DataFrame:
         """
-        Optional: Remove noisy or invalid samples.
-        Example: remove rows where all numeric features are 0 or 1.
+        Remove noisy or invalid wafer samples based on simple numeric checks.
+        Example rule: remove rows where all numeric features are either 0 or 1.
+
+        Returns
+        -------
+        pd.DataFrame
+            Filtered dataset without invalid or noisy rows.
         """
         if not self.noise_filter:
             return self.data
@@ -71,7 +124,21 @@ class WaferDataLoader:
         return self.data
 
     def process(self) -> pd.DataFrame:
-        """Execute the complete data ingestion and preprocessing pipeline."""
+        """
+        Execute the full data preprocessing pipeline step-by-step.
+
+        Pipeline steps:
+        ---------------
+        1. Load dataset from CSV.
+        2. Handle missing or corrupted data.
+        3. Normalize numeric feature columns.
+        4. Optionally remove noisy wafer samples.
+
+        Returns
+        -------
+        pd.DataFrame
+            Fully preprocessed dataset ready for feature extraction or modeling.
+        """
         print("[STEP 1] Loading dataset...")
         self.load_dataset()
         print("[STEP 2] Handling missing or corrupted samples...")
@@ -87,11 +154,16 @@ class WaferDataLoader:
 
 # Example usage
 if __name__ == "__main__":
+    """
+    Example run of the wafer preprocessing pipeline.
+    Loads the wafer dataset, applies cleaning and normalization,
+    and saves the processed output to a new CSV file.
+    """
     loader = WaferDataLoader(
-        dataset_path=r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\LSWMD_1500.csv",
+        dataset_path=r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\datasets\LSWMD_1500.csv",
         normalize=True,
         noise_filter=True
     )
     processed_data = loader.process()
-    processed_data.to_csv(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\LSWMD_1500_preprocessed.csv", index=False)
+    processed_data.to_csv(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\LSWMD_1500_preprocessed.csv", index=False)
     print("[SAVE] Preprocessed dataset saved as LSWMD_1500_preprocessed.csv")
