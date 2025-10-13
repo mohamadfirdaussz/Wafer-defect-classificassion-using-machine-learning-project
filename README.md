@@ -4,6 +4,29 @@ A modular end-to-end pipeline for **wafer defect classification** using traditio
 The system performs **data ingestion**, **preprocessing**, **feature selection**, and **model training** with multiple classifiers and tuning strategies.
 
 ---
+# 🧠 SEMICONDUCTOR WAFER DEFECT CLASSIFICATION — DATA PREPROCESSING & FEATURE ENGINEERING
+
+This repository contains the **first two stages** of the wafer defect classification pipeline:
+1. **Data Loading & Preprocessing** (`data_loader.py`)
+2. **Feature Engineering** (`feature_engineer.py`)
+
+
+---
+## 📂 Project Structure
+FYP1/
+│
+├── data_loader.py # Load and preprocess raw wafer data
+├── feature_engineer.py # Extract statistical and geometric features
+│
+├── data/
+│ ├── LSWMD_1500.csv # Raw wafer dataset
+│ ├── data_loader_results/
+│ │ └── LSWMD_1500_preprocessed.csv
+│ └── feature_engineering_results/
+│ └── LSWMD_1500_features.csv
+│
+└── requirements.txt # Dependencies
+
 
 ## 📁 PIPELINE OVERVIEW
 
@@ -83,4 +106,4 @@ Use all numeric features without reduction.
 
 ###📘 NOTES
 
-Embedded selection may take longer due to model fitting.
+Embedded selection may take longer due to model fitting.BLUM SIAPPP
