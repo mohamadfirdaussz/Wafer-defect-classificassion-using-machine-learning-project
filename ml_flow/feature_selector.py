@@ -1,195 +1,180 @@
-# feature_selector.py
-
 """
-feature_selector.py
+Feature Selection Module for Wafer Defect Classification
+=========================================================
+Implements Step 4 of the ML pipeline: selecting optimal features
+from the combined feature set (Step 3). Supports three parallel
+tracks:
 
-Performs feature selection for wafer defect classification using
-baseline, filter/wrapper, and embedded methods.
+4A. Baseline (no selection, use all features)
+4B. Filter/Wrapper (correlation filter, RFE)
+4C. Embedded (Lasso, RandomForest)
 
-Tracks:
-    4A - Baseline (all features)
-    4B - Filter/Wrapper (correlation + RFE)
-    4C - Embedded (LassoCV + RandomForest)
+Inputs:
+- combined_features.csv (from Step 3)
+
+Outputs:
+- selected_features_baseline.csv
+- selected_features_filter.csv
+- selected_features_embedded.csv
+
+Author: ChatGPT (GPT-5) for Hajii
+Date: 2025-10-26
 """
 
 import os
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LassoCV
-from sklearn.feature_selection import RFE, SelectKBest, f_classif
+from pathlib import Path
+from sklearn.feature_selection import RFE
+from sklearn.linear_model import LogisticRegression, LassoCV
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import LabelEncoder
 
-
-class WaferFeatureSelector:
+class FeatureSelector:
     """
-    Handles feature selection for wafer defect classification.
-    Supports:
-        4A - Baseline (no reduction)
-        4B - Filter/Wrapper (ANOVA F-test + RFE)
-        4C - Embedded (LassoCV + RandomForest)
+    Performs feature selection across three tracks:
+    - Baseline: keep all features
+    - Filter/Wrapper: correlation filter + RFE
+    - Embedded: Lasso + Random Forest feature importance
     """
-
-    def __init__(self, dataset_path: str, target_col: str):
-        """
-        Initialize selector with dataset and target label column.
-
-        Args:
-            dataset_path (str): Path to CSV file containing features and labels.
-            target_col (str): Name of the target column.
-        """
-        self.dataset_path = dataset_path
-        self.target_col = target_col
-        self.data = None
+    def __init__(self, input_csv: str, output_dir: str):
+        self.input_csv = Path(input_csv)
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.df = None
         self.X = None
         self.y = None
 
     def load_data(self):
-        """Load dataset, remove non-numeric columns, and separate target."""
-        if not os.path.exists(self.dataset_path):
-            raise FileNotFoundError(f"Dataset not found at {self.dataset_path}")
+        print("[STEP 1] Loading combined features...")
+        self.df = pd.read_csv(self.input_csv)
+        print(f"[INFO] Loaded shape: {self.df.shape}")
 
-        self.data = pd.read_csv(self.dataset_path)
-        if self.target_col not in self.data.columns:
-            raise KeyError(f"Target column '{self.target_col}' not found.")
+        # infer label column
+        possible_targets = ["failureType", "label", "target", "class"]
+        label_col = next((c for c in self.df.columns if c in possible_targets), None)
 
-        self.y = self.data[self.target_col]
-        self.X = self.data.drop(columns=[self.target_col])
+        if label_col:
+            self.y = self.df[label_col]
+            print(f"[INFO] Detected label column: {label_col}")
+        else:
+            print("[WARN] No label column found. Using unsupervised selection only.")
+            self.y = None
 
-        # keep only numeric columns
-        numeric_cols = self.X.select_dtypes(include=[np.number]).columns
-        removed_cols = set(self.X.columns) - set(numeric_cols)
-        self.X = self.X[numeric_cols]
+        # keep only numeric predictors
+        self.X = self.df.select_dtypes(include=[np.number])
+        print(f"[INFO] Numeric features: {self.X.shape[1]} columns")
 
-        print(f"[INFO] Loaded dataset with {self.X.shape[1]} numeric features and {len(self.X)} samples.")
-        if removed_cols:
-            print(f"[WARN] Removed {len(removed_cols)} non-numeric columns: {list(removed_cols)[:5]}...")
-
-    # ─────────────────────────────────────────────────────────────
-    # 4A: BASELINE (no selection)
-    # ─────────────────────────────────────────────────────────────
-    def baseline_features(self) -> pd.DataFrame:
-        """Return all features (baseline)."""
-        print("[4A] Baseline: using all features.")
+    # -------------------------------
+    # 4A: Baseline
+    # -------------------------------
+    def baseline_all(self):
+        """Return all features without selection."""
+        print("[4A] Baseline: keeping all features.")
         return self.X.copy()
 
-    # ─────────────────────────────────────────────────────────────
-    # 4B: FILTER / WRAPPER METHODS
-    # ─────────────────────────────────────────────────────────────
-    def filter_wrapper_features(self, top_k_filter: int = 50, n_features_rfe: int = 30) -> pd.DataFrame:
-        """
-        Apply filter (ANOVA F-test) and wrapper (RFE) feature selection.
+    # -------------------------------
+    # 4B: Filter + Wrapper
+    # -------------------------------
+    def correlation_filter(self, threshold: float = 0.95):
+        """Remove highly correlated features (Pearson correlation)."""
+        print(f"[4B-1] Correlation filtering (threshold={threshold})...")
+        corr = self.X.corr().abs()
+        upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
+        to_drop = [c for c in upper.columns if any(upper[c] > threshold)]
+        X_filtered = self.X.drop(columns=to_drop)
+        print(f"[INFO] Removed {len(to_drop)} correlated features.")
+        return X_filtered
 
-        Args:
-            top_k_filter (int): Number of top features to select using ANOVA F-test.
-            n_features_rfe (int): Number of features to keep after RFE.
-        """
-        if self.X.empty:
-            raise ValueError("No numeric features available for selection.")
+    def rfe_selection(self, X_filtered: pd.DataFrame, n_features: int = 50):
+        """Recursive Feature Elimination using Logistic Regression."""
+        if self.y is None:
+            print("[WARN] No target available, skipping RFE.")
+            return X_filtered
+        print("[4B-2] Recursive Feature Elimination (RFE)...")
+        model = LogisticRegression(max_iter=1000)
+        rfe = RFE(model, n_features_to_select=min(n_features, X_filtered.shape[1]))
+        rfe.fit(X_filtered, self.y)
+        selected = X_filtered.columns[rfe.support_]
+        print(f"[INFO] RFE selected {len(selected)} features.")
+        return X_filtered[selected]
 
-        # 1. Filter method using ANOVA F-test
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(self.X)
+    # -------------------------------
+    # 4C: Embedded Methods
+    # -------------------------------
+    def lasso_selection(self, alpha_values=None):
+        """Feature selection using LassoCV."""
+        if self.y is None:
+            print("[WARN] No target available, skipping Lasso.")
+            return self.X
+        print("[4C-1] LassoCV feature selection...")
+        if alpha_values is None:
+            alpha_values = np.logspace(-4, 0, 10)
+        y_enc = LabelEncoder().fit_transform(self.y)
+        lasso = LassoCV(alphas=alpha_values, cv=5, max_iter=5000)
+        lasso.fit(self.X, y_enc)
+        coef_mask = np.abs(lasso.coef_) > 1e-6
+        selected = self.X.columns[coef_mask]
+        print(f"[INFO] Lasso selected {len(selected)} features.")
+        return self.X[selected]
 
-        selector = SelectKBest(score_func=f_classif, k=min(top_k_filter, self.X.shape[1]))
-        X_filtered = selector.fit_transform(X_scaled, self.y)
-        filtered_features = self.X.columns[selector.get_support()]
-        print(f"[4B] Filter: selected top {len(filtered_features)} features via ANOVA F-test.")
+    def tree_based_selection(self, top_n=50):
+        """Feature selection using Random Forest importance ranking."""
+        if self.y is None:
+            print("[WARN] No target available, skipping tree-based selection.")
+            return self.X
+        print("[4C-2] Random Forest feature importance selection...")
+        y_enc = LabelEncoder().fit_transform(self.y)
+        forest = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
+        forest.fit(self.X, y_enc)
+        importances = pd.Series(forest.feature_importances_, index=self.X.columns)
+        top_features = importances.nlargest(min(top_n, len(importances))).index
+        print(f"[INFO] RandomForest selected top {len(top_features)} features.")
+        return self.X[top_features]
 
-        X_filtered_df = self.X[filtered_features]
-
-        # 2. Wrapper method using Recursive Feature Elimination
-        model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
-        rfe = RFE(model, n_features_to_select=min(n_features_rfe, len(filtered_features)))
-        rfe.fit(X_filtered_df, self.y)
-
-        selected_cols = X_filtered_df.columns[rfe.support_]
-        print(f"[4B] Wrapper: selected {len(selected_cols)} features via RFE.")
-
-        return X_filtered_df[selected_cols]
-
-    # ─────────────────────────────────────────────────────────────
-    # 4C: EMBEDDED METHODS (LASSO + TREE-BASED)
-    # ─────────────────────────────────────────────────────────────
-    # ─────────────────────────────────────────────────────────────
-    # 4C: EMBEDDED METHODS (LASSO + TREE-BASED)
-    # ─────────────────────────────────────────────────────────────
-    def embedded_features(self, top_k_tree: int = 30) -> pd.DataFrame:
-        """
-        Apply embedded feature selection using LassoCV (L1 regularization)
-        and RandomForest feature importance.
-
-        Args:
-            top_k_tree (int): Number of top features to select from tree-based importance.
-
-        Returns:
-            pd.DataFrame: DataFrame with selected embedded features.
-        """
-        if self.X.empty:
-            raise ValueError("No numeric features available for selection.")
-
-        # Encode categorical target values to integers if necessary
-        y_encoded = pd.factorize(self.y)[0]
-
-        # Standardize features for LassoCV
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(self.X)
-
-        print("[4C] Embedded: performing LassoCV + Tree-based feature selection...")
-
-        # 1. LassoCV selection (for linear sparsity)
-        lasso = LassoCV(cv=3, random_state=42, n_jobs=-1, max_iter=10000)
-        try:
-            LassoCV(cv=3, n_jobs=-1, max_iter=10000)
-            lasso.fit(X_scaled, y_encoded)
-            coef = np.abs(lasso.coef_)
-            lasso_selected = self.X.columns[coef > np.percentile(coef, 90)].tolist()
-            print(f"[4C] LassoCV: selected {len(lasso_selected)} features.")
-        except Exception as e:
-            print(f"[WARN] LassoCV failed: {e}")
-            lasso_selected = []
-
-        # 2. RandomForest feature importance (nonlinear)
-        rf = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
-        rf.fit(self.X, y_encoded)
-        importances = rf.feature_importances_
-        indices = np.argsort(importances)[::-1][:top_k_tree]
-        tree_selected = self.X.columns[indices].tolist()
-        print(f"[4C] Tree-based: selected top {len(tree_selected)} features.")
-
-        # Combine unique features
-        combined_features = list(set(lasso_selected + tree_selected))
-        print(f"[4C] Embedded: total {len(combined_features)} unique selected features.")
-
-        return self.X[combined_features]
-
-
-    # ─────────────────────────────────────────────────────────────
-    # RUN ALL TRACKS
-    # ─────────────────────────────────────────────────────────────
-    def run_all_tracks(self, output_dir: str):
-        """Execute all feature selection tracks and save results."""
+    # -------------------------------
+    # RUN PIPELINE
+    # -------------------------------
+    def run(self):
         self.load_data()
-        os.makedirs(output_dir, exist_ok=True)
 
-        baseline = self.baseline_features()
-        baseline.to_csv(os.path.join(output_dir, "features_4A_baseline.csv"), index=False)
+        # 4A
+        baseline_df = self.baseline_all()
+        baseline_df.to_csv(self.output_dir / "selected_features_baseline.csv", index=False)
 
-        fw = self.filter_wrapper_features()
-        fw.to_csv(os.path.join(output_dir, "features_4B_filter_wrapper.csv"), index=False)
+        # 4B
+        filtered_df = self.correlation_filter()
+        rfe_df = self.rfe_selection(filtered_df)
+        rfe_df.to_csv(self.output_dir / "selected_features_filter.csv", index=False)
 
-        embedded = self.embedded_features()
-        embedded.to_csv(os.path.join(output_dir, "features_4C_embedded.csv"), index=False)
+        # 4C
+        lasso_df = self.lasso_selection()
+        tree_df = self.tree_based_selection()
 
-        print(f"[DONE] Feature selection results saved in: {output_dir}")
+        embedded_df = pd.concat([lasso_df, tree_df], axis=1)
+        embedded_df = embedded_df.loc[:, ~embedded_df.columns.duplicated()]
+        embedded_df.to_csv(self.output_dir / "selected_features_embedded.csv", index=False)
+
+        print("[DONE] Feature selection complete.")
+        print(f"[OUTPUTS]\n - Baseline: {baseline_df.shape}\n - Filter: {rfe_df.shape}\n - Embedded: {embedded_df.shape}")
+        return {
+            "baseline": baseline_df,
+            "filter": rfe_df,
+            "embedded": embedded_df
+        }
 
 
-# Example usage
 if __name__ == "__main__":
-    selector = WaferFeatureSelector(
-        dataset_path=r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\LSWMD_1500_combined.csv",
-        target_col="failureType"
-    )
-    selector.run_all_tracks(
-        output_dir=r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_selection_results"
-    )
+    input_csv = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_engineering_results\combined_features.csv"
+    output_dir = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_selection_results"
+
+    selector = FeatureSelector(input_csv=input_csv, output_dir=output_dir)
+    results = selector.run()
+
+#
+# Baseline (1296, 1250) → all 1 296 wafer samples with 1 250 original features kept (no selection).
+#
+# Filter (1296, 50) → same 1 296 samples but reduced to 50 features after correlation and RFE filtering.
+#
+# Embedded (1296, 66) → same samples but 66 selected features (17 from Lasso + 49 from Random Forest, combined and deduplicated).

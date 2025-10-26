@@ -2,36 +2,56 @@
 #VERSION 2
 
 """
-Wafer Data Loader Module
-========================
+# Wafer Data Loader Module
 
 This module defines the `WaferDataLoader` class for loading and preprocessing
 semiconductor wafer defect datasets stored in CSV format. It supports parsing
 stringified wafer map arrays, cleaning missing or noisy data, and normalizing
 numeric columns for machine learning tasks.
 
-Main Capabilities:
-------------------
-1. Load wafer manufacturing datasets from CSV.
-2. Convert wafer maps stored as stringified 2D arrays into NumPy arrays.
-3. Handle and remove rows with missing or invalid data.
-4. Optionally normalize numeric features using MinMax scaling.
-5. Optionally filter out noisy samples with uniform or invalid numeric values.
-6. Save cleaned data as both CSV (metadata) and NPZ (array data) files.
+## Main Capabilities
 
-Example:
---------
-    loader = WaferDataLoader("datasets/LSWMD_1500.csv", normalize=True, noise_filter=True)
-    processed_data = loader.process()
-    processed_data.to_csv("processed.csv", index=False)
+1. **Load wafer manufacturing datasets from CSV.**
+Important because it allows consistent and automated access to large-scale
+wafer production data stored in standard formats.
+
+2. **Convert wafer maps stored as stringified 2D arrays into NumPy arrays.**
+Important because machine learning models and analysis tools require data
+in numerical array formats for efficient computation.
+
+3. **Handle and remove rows with missing or invalid data.**
+Important because cleaning invalid entries improves data reliability and
+prevents model bias or training errors.
+
+4. **Optionally normalize numeric features using MinMax scaling.**
+Important because normalization ensures all features contribute equally to
+model learning and speeds up convergence.
+
+5. **Optionally filter out noisy samples with uniform or invalid numeric values.**
+Important because removing noise enhances dataset quality and improves model
+accuracy and generalization.
+
+6. **Save cleaned data as both CSV (metadata) and NPZ (array data) files.**
+Important because saving in multiple formats ensures compatibility with
+    different analysis tools and supports efficient data reuse.
 """
+
+# Example:
+# --------
+#     loader = WaferDataLoader("datasets/LSWMD_1500.csv", normalize=True, noise_filter=True)
+#     processed_data = loader.process()
+#     processed_data.to_csv("processed.csv", index=False)
+
 
 import os
 import ast
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-
+#why use minmaxscaler? because it scales the data to a fixed range, usually 0 to 1, which is useful for algorithms that are sensitive to the scale of input features.
+# It preserves the shape of the original distribution and is less affected by outliers compared to standardization.
+#kenapa guna MinMaxScaler? kerana ia menukar skala data kepada julat tetap, biasanya antara 0 hingga 1, yang berguna untuk algoritma yang sensitif terhadap skala ciri input.
+#Ia mengekalkan bentuk taburan asal dan kurang terjejas oleh nilai luar biasa (outlier) berbanding kaedah penyeragaman (standardization).
 
 class WaferDataLoader:
     """
@@ -67,7 +87,49 @@ class WaferDataLoader:
     """
 
     def __init__(self, dataset_path: str, normalize: bool = True, noise_filter: bool = False):
-        """Initialize data loader with dataset path and preprocessing options."""
+        """
+  Initialize the WaferDataLoader class with dataset configuration and preprocessing options.
+
+  This constructor sets up the initial parameters required to load and preprocess
+  wafer map data for machine learning tasks such as defect classification.
+
+  Parameters
+  ----------
+  dataset_path : str
+      The file path to the wafer dataset (e.g., a CSV file containing wafer map data).
+  normalize : bool, optional (default=True)
+      If True, normalization (scaling) will be applied to numerical features
+      using Min-Max scaling to bring all values into a fixed range (usually 0 to 1).
+      This helps improve model training stability and performance.
+  noise_filter : bool, optional (default=False)
+      If True, applies a noise filtering step during preprocessing
+      to remove or reduce unwanted noise from wafer map data.
+
+  Attributes
+  ----------
+  data : pandas.DataFrame or None
+      Stores the loaded dataset after it is read from the file.
+      Initially set to None until the dataset is loaded.
+  scaler : sklearn.preprocessing.MinMaxScaler
+      A scaling object used for feature normalization if `normalize=True`.
+
+  Purpose
+  -------
+  This constructor is the first step in the wafer data preprocessing pipeline.
+  It prepares the necessary configuration to:
+      • Load raw wafer map data from the given path.
+      • Optionally clean and normalize the data.
+      • Prepare the dataset for feature extraction and model training.
+
+  Example
+  -------
+  # >>> loader = WaferDataLoader(
+  ...     dataset_path=r"C:\\datasets\\wafer_data.csv",
+  ...     normalize=True,
+  ...     noise_filter=True
+  ... )
+  # >>> loader.load_data()  # Next step: load and preprocess the dataset
+  """
         self.dataset_path = dataset_path
         self.normalize = normalize
         self.noise_filter = noise_filter
@@ -85,7 +147,15 @@ class WaferDataLoader:
 
     def parse_wafer_map(self) -> pd.DataFrame:
         """
+        The waferMap column contains the wafer bin map, pixel by pixel. For simplicity, each die on the WBM is considered failed if it fails for at least one test, and otherwise it is considered functional. If a die on a wafer fails, it is marked as 2 or it is marked 1 if it passes. Therefore, each pixels has a categorical variable that expresses
+
+        0 : not wafer
+        1 : normal
+        2 : faulty
+        The waferIndex column indicates the index of the wafer in a 25-wafer lot
+
         Convert stringified waferMap entries into NumPy arrays.
+
 
         Example
         -------
@@ -168,10 +238,39 @@ class WaferDataLoader:
 
 
 if __name__ == "__main__":
-    """
-    Example execution block.
-    Loads a wafer dataset, runs preprocessing pipeline, and saves results as CSV and NPZ files.
-    """
+  #
+  # Example Execution Block
+  # -----------------------
+  #
+  # This section shows how to use the `WaferDataLoader` class step by step.
+  #
+  # It does the following:
+  #
+  # 1. **Create the data loader**
+  #    - The `WaferDataLoader` is created with the path to the wafer dataset (CSV file).
+  #    - The `normalize=True` option scales numeric values between 0 and 1, which helps
+  #      machine learning models learn better.
+  #    - The `noise_filter=True` option removes samples that have bad or noisy data.
+  #
+  # 2. **Process the dataset**
+  #    - The `.process()` function runs the full cleaning and preprocessing steps.
+  #    - This includes reading the CSV, converting wafer maps into NumPy arrays,
+  #      cleaning invalid rows, scaling numbers, and filtering noisy samples.
+  #
+  # 3. **Save the cleaned results**
+  #    - The cleaned **metadata** (everything except the wafer maps) is saved as a new CSV file.
+  #    - This file contains useful information about each wafer after cleaning.
+  #
+  # 4. **Save the wafer maps separately**
+  #    - The wafer map data (2D arrays showing wafer defects) is saved as a compressed NPZ file.
+  #    - This makes it smaller in size and easy to load later using NumPy.
+  #
+  # 5. **Print confirmation messages**
+  #    - After saving, the script prints messages showing where the cleaned files are stored.
+  #
+  # In short, this block automatically loads, cleans, and saves wafer defect data.
+  # It is useful for testing or running the full preprocessing pipeline on real datasets.
+
 
     loader = WaferDataLoader(
         dataset_path=r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\datasets\LSWMD_1500.csv",
@@ -181,7 +280,7 @@ if __name__ == "__main__":
     processed_data = loader.process()
 
     # Save processed metadata
-    csv_path = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\LSWMD_1500_preprocessed.csv"
+    csv_path = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\cleaned_data.csv"
     processed_data.drop(columns=['waferMap']).to_csv(csv_path, index=False)
     print(f"[SAVE] Metadata saved to {csv_path}")
 
@@ -189,178 +288,3 @@ if __name__ == "__main__":
     npz_path = csv_path.replace('.csv', '.npz')
     np.savez_compressed(npz_path, wafer_maps=np.array(processed_data['waferMap'].tolist(), dtype=object))
     print(f"[SAVE] Wafer maps saved to {npz_path}")
-
-
-
-#VERSION 1
-
-# # data_loader.py
-#
-# import os
-# import numpy as np
-# import pandas as pd
-# from sklearn.preprocessing import MinMaxScaler
-#
-#
-# class WaferDataLoader:
-#     """
-#     Loading and preprocessing semiconductor wafer defect data.
-#     It performs data ingestion, cleaning, normalization, and optional noise removal.
-#
-#     Main responsibilities:
-#     -----------------------
-#     • Load dataset from CSV.
-#     • Handle missing or corrupted data.
-#     • Normalize numeric features using MinMaxScaler.
-#     • Optionally filter out noisy or invalid wafer patterns.
-#
-#     Typical use:
-#     ------------
-#         loader = WaferDataLoader("dataset.csv", normalize=True, noise_filter=True)
-#         clean_data = loader.process()
-#     """
-#
-#     def __init__(self, dataset_path: str, normalize: bool = True, noise_filter: bool = False):
-#         """
-#         Initialize the WaferDataLoader with dataset path and configuration options.
-#
-#         Parameters
-#         ----------
-#         dataset_path : str
-#             File path to the wafer dataset in CSV format.
-#         normalize : bool, default=True
-#             Whether to apply MinMax scaling to numerical features.
-#         noise_filter : bool, default=False
-#             Whether to enable noise removal for invalid wafer samples.
-#
-#         Attributes
-#         ----------
-#         data : pd.DataFrame
-#             Stores the loaded dataset.
-#         scaler : MinMaxScaler
-#             Scaler used for feature normalization.
-#         """
-#         self.dataset_path = dataset_path
-#         self.normalize = normalize
-#         self.noise_filter = noise_filter
-#         self.data = None
-#         self.scaler = MinMaxScaler()
-#
-#     def load_dataset(self) -> pd.DataFrame:
-#         """
-#         Load the wafer dataset from the provided CSV file path.
-#
-#         Returns
-#         -------
-#         pd.DataFrame
-#             Loaded dataset.
-#         Raises
-#         ------
-#         FileNotFoundError
-#             If the specified dataset path does not exist.
-#         """
-#         if not os.path.exists(self.dataset_path):
-#             raise FileNotFoundError(f"Dataset not found at {self.dataset_path}")
-#
-#         self.data = pd.read_csv(self.dataset_path)
-#         print(f"[INFO] Dataset loaded successfully: {len(self.data)} samples")
-#         return self.data
-#
-#     def handle_missing_data(self) -> pd.DataFrame:
-#         """
-#         Remove any rows containing missing or NaN values.
-#
-#         Returns
-#         -------
-#         pd.DataFrame
-#             Cleaned dataset without missing data.
-#         """
-#         before = len(self.data)
-#         self.data.dropna(inplace=True)
-#         after = len(self.data)
-#         print(f"[CLEAN] Removed {before - after} rows with missing values")
-#         return self.data
-#
-#     def normalize_features(self) -> pd.DataFrame:
-#         """
-#         Apply MinMax normalization to all numerical feature columns.
-#
-#         Returns
-#         -------
-#         pd.DataFrame
-#             Dataset with normalized numeric columns in the range [0, 1].
-#         """
-#         numeric_cols = self.data.select_dtypes(include=[np.number]).columns.tolist()
-#         if not numeric_cols:
-#             print("[WARN] No numeric columns found for normalization.")
-#             return self.data
-#
-#         self.data[numeric_cols] = self.scaler.fit_transform(self.data[numeric_cols])
-#         print(f"[INFO] Normalized {len(numeric_cols)} numeric columns using MinMaxScaler")
-#         return self.data
-#
-#     def remove_noise(self) -> pd.DataFrame:
-#         """
-#         Remove noisy or invalid wafer samples based on simple numeric checks.
-#         Example rule: remove rows where all numeric features are either 0 or 1.
-#
-#         Returns
-#         -------
-#         pd.DataFrame
-#             Filtered dataset without invalid or noisy rows.
-#         """
-#         if not self.noise_filter:
-#             return self.data
-#
-#         numeric_cols = self.data.select_dtypes(include=[np.number]).columns
-#         before = len(self.data)
-#         self.data = self.data[~self.data[numeric_cols].apply(lambda x: (x == 0).all() or (x == 1).all(), axis=1)]
-#         after = len(self.data)
-#         print(f"[FILTER] Removed {before - after} noisy or invalid rows")
-#         return self.data
-#
-#     def process(self) -> pd.DataFrame:
-#         """
-#         Execute the full data preprocessing pipeline step-by-step.
-#
-#         Pipeline steps:
-#         ---------------
-#         1. Load dataset from CSV.
-#         2. Handle missing or corrupted data.
-#         3. Normalize numeric feature columns.
-#         4. Optionally remove noisy wafer samples.
-#
-#         Returns
-#         -------
-#         pd.DataFrame
-#             Fully preprocessed dataset ready for feature extraction or modeling.
-#         """
-#         print("[STEP 1] Loading dataset...")
-#         self.load_dataset()
-#         print("[STEP 2] Handling missing or corrupted samples...")
-#         self.handle_missing_data()
-#         print("[STEP 3] Normalizing wafer feature columns...")
-#         self.normalize_features()
-#         if self.noise_filter:
-#             print("[STEP 4] Removing noisy wafer samples...")
-#             self.remove_noise()
-#         print(f"[DONE] Preprocessing complete. Final samples: {len(self.data)}")
-#         return self.data
-#
-#
-# # Example usage
-# if __name__ == "__main__":
-#     """
-#     Example run of the wafer preprocessing pipeline.
-#     Loads the wafer dataset, applies cleaning and normalization,
-#     and saves the processed output to a new CSV file.
-#     """
-#     loader = WaferDataLoader(
-#         dataset_path=r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\datasets\LSWMD_1500.csv",
-#         normalize=True,
-#         noise_filter=True
-#     )
-#     processed_data = loader.process()
-#     processed_data.to_csv(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\LSWMD_1500_preprocessed.csv", index=False)
-#     print("[SAVE] Preprocessed dataset saved as LSWMD_1500_preprocessed.csv")
-#

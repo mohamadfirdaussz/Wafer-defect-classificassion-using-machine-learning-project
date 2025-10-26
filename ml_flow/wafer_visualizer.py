@@ -1,6 +1,6 @@
 
 import numpy as np
-data = np.load("C:/Users/user/OneDrive - ums.edu.my/FYP 1/data_loader_results/LSWMD_1500_preprocessed.npz", allow_pickle=True)
+data = np.load("C:/Users/user/OneDrive - ums.edu.my/FYP 1/feature_engineering_results/features.npz", allow_pickle=True)
 wafer_maps = data['wafer_maps']
 print(wafer_maps.shape)
 print(wafer_maps[0])
