@@ -1,13 +1,36 @@
 """
-Model training (Step 5) using the EMBEDDED feature set.
-- Recovers target label from combined_features.csv.
-- Trains multiple classifiers with RandomizedSearchCV (StratifiedKFold).
-- Saves best models and summary CSV.
+Model Training Step 5 — Embedded Feature Set
+─────────────────────────────────────────────
+**Why use this code:**
+This script is used to train and evaluate several machine learning models
+on wafer defect classification tasks using **embedded-selected features**.
+It helps find the best-performing model and hyperparameters automatically.
 
-Usage:
-    python model_training_step5_embedded.py
+**How it runs:**
+1. Loads the embedded feature dataset (`selected_features_embedded.csv`).
+2. Attaches the correct label (target class) from the combined features file.
+3. Splits data into training and testing sets.
+4. For each model (SVM, DecisionTree, RandomForest, etc.):
+   - Builds a training pipeline (scaling + model)
+   - Runs **RandomizedSearchCV** with cross-validation
+   - Finds and saves the best model configuration
+5. Evaluates the best model on the test set using metrics like:
+   - Accuracy
+   - F1 Score
+   - Precision
+   - Recall
+6. Saves:
+   - Each best model (`.joblib` file)
+   - A summary CSV of model performances and parameters.
+
+**Purpose of the code:**
+To automate model selection and performance evaluation
+for wafer defect classification. It ensures that the best
+combination of model and hyperparameters is saved for deployment
+or further analysis.
+
+─────────────────────────────────────────────
 """
-
 from pathlib import Path
 import time
 import json
@@ -41,85 +64,91 @@ COMBINED_CSV = BASE_DIR / "feature_engineering_results" / "combined_features.csv
 OUT_DIR = BASE_DIR / "model_training_results"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-RANDOM_STATE = 42
-CV_SPLITS = 5
-N_ITER = 40
-TEST_SIZE = 0.2
-N_JOBS = -1
+# 🔹 Random settings and cross-validation configuration
+RANDOM_STATE = 42  # Fixed seed to ensure reproducible results in every run
+CV_SPLITS = 5      # Number of folds for StratifiedKFold cross-validation
+N_ITER = 40        # Number of random hyperparameter combinations tested per model
+TEST_SIZE = 0.2    # 20% of dataset is reserved for testing; 80% used for training
+N_JOBS = -1        # Use all available CPU cores for faster training and search
 
-# MODEL SPECS — fixed with proper pipeline parameter names
+# 🔹 MODEL_SPECS defines models and their hyperparameter search spaces
 MODEL_SPECS = {
     "SVM": (
         SVC(probability=True),
         {
-            "svm__C": [0.1, 1, 10, 100],
-            "svm__gamma": ["scale", "auto"],
-            "svm__kernel": ["rbf", "linear"],
+            "svm__C": [0.1, 1, 10, 100],               # Regularization strength
+            "svm__gamma": ["scale", "auto"],           # Kernel coefficient
+            "svm__kernel": ["rbf", "linear"],          # Kernel type
         },
     ),
     "DecisionTree": (
         DecisionTreeClassifier(random_state=RANDOM_STATE),
         {
-            "decisiontree__criterion": ["gini", "entropy"],
-            "decisiontree__max_depth": [None, 5, 10, 20],
-            "decisiontree__min_samples_split": [2, 5, 10],
-            "decisiontree__min_samples_leaf": [1, 2, 4],
+            "decisiontree__criterion": ["gini", "entropy"],     # Split quality measure
+            "decisiontree__max_depth": [None, 5, 10, 20],       # Tree depth
+            "decisiontree__min_samples_split": [2, 5, 10],      # Minimum samples to split node
+            "decisiontree__min_samples_leaf": [1, 2, 4],        # Minimum samples per leaf
         },
     ),
     "RandomForest": (
         RandomForestClassifier(random_state=RANDOM_STATE, n_jobs=N_JOBS),
         {
-            "randomforest__n_estimators": [100, 200, 400],
-            "randomforest__max_depth": [None, 10, 20],
-            "randomforest__min_samples_split": [2, 5, 10],
+            "randomforest__n_estimators": [100, 200, 400],      # Number of trees
+            "randomforest__max_depth": [None, 10, 20],          # Maximum depth of each tree
+            "randomforest__min_samples_split": [2, 5, 10],      # Split threshold
         },
     ),
     "KNN": (
         KNeighborsClassifier(),
         {
-            "knn__n_neighbors": [3, 5, 7, 9],
-            "knn__weights": ["uniform", "distance"],
+            "knn__n_neighbors": [3, 5, 7, 9],                   # Number of neighbors
+            "knn__weights": ["uniform", "distance"],            # Weight type for distance
         },
     ),
     "LogisticRegression": (
         LogisticRegression(max_iter=5000, solver="saga"),
         {
-            "logisticregression__C": [0.01, 0.1, 1, 10],
-            "logisticregression__penalty": ["l1", "l2", "elasticnet"],
+            "logisticregression__C": [0.01, 0.1, 1, 10],        # Regularization strength
+            "logisticregression__penalty": ["l1", "l2", "elasticnet"],  # Penalty type
         },
     ),
     "GradientBoosting": (
         GradientBoostingClassifier(random_state=RANDOM_STATE),
         {
-            "gradientboosting__n_estimators": [100, 200],
-            "gradientboosting__learning_rate": [0.05, 0.1],
-            "gradientboosting__max_depth": [3, 5],
+            "gradientboosting__n_estimators": [100, 200],       # Number of boosting stages
+            "gradientboosting__learning_rate": [0.05, 0.1],     # Learning rate for shrinkage
+            "gradientboosting__max_depth": [3, 5],              # Depth of individual estimators
         },
     ),
 
-    "XGBoost": (XGBClassifier(random_state=42, eval_metric="mlogloss"), {
-        "xgboost__n_estimators": [50, 100, 150],
-        "xgboost__learning_rate": [0.01, 0.1, 0.2],
-        "xgboost__max_depth": [3, 4, 5],
-        "xgboost__subsample": [0.8, 1.0],
-        "xgboost__colsample_bytree": [0.8, 1.0],}
-
-)}
-
-# if HAS_XGB:
-#     MODEL_SPECS["XGBoost"] = (
-#         XGBClassifier(
-#             use_label_encoder=False, eval_metric="mlogloss", random_state=RANDOM_STATE
-#         ),
-#         {
-#             "xgboost__n_estimators": [100, 200],
-#             "xgboost__max_depth": [3, 5],
-#             "xgboost__learning_rate": [0.05, 0.1],
-#         },
-#     )
-
+    # XGBoost model with its specific hyperparameters
+    "XGBoost": (
+        XGBClassifier(random_state=42, eval_metric="mlogloss"),
+        {
+            "xgboost__n_estimators": [50, 100, 150],            # Number of boosting rounds
+            "xgboost__learning_rate": [0.01, 0.1, 0.2],         # Step size shrinkage
+            "xgboost__max_depth": [3, 4, 5],                    # Maximum tree depth
+            "xgboost__subsample": [0.8, 1.0],                   # Fraction of samples used per tree
+            "xgboost__colsample_bytree": [0.8, 1.0],            # Fraction of features used per tree
+        },
+    ),
+}
 
 def load_and_attach_label(embedded_path: Path, combined_path: Path):
+    """
+     Why:
+    To load the embedded feature dataset and attach the correct target labels
+    (e.g., defect class) from the combined features file.
+
+     How:
+    1. Reads both embedded and combined feature CSV files.
+    2. Detects which column contains the target label.
+    3. Aligns both datasets by index or wafer ID.
+    4. Returns a merged DataFrame and label column name.
+
+     Purpose:
+    To prepare a complete dataset (features + label) ready for model training.
+    """
     if not embedded_path.exists():
         raise FileNotFoundError(f"Embedded features file not found: {embedded_path}")
     df_emb = pd.read_csv(embedded_path)
@@ -162,6 +191,19 @@ def load_and_attach_label(embedded_path: Path, combined_path: Path):
 
 
 def prepare_X_y(df, label_col):
+    """
+   Why:
+  Converts the dataset into input features (X) and encoded labels (y)
+  for training machine learning models.
+
+   How:
+  1. Drops the label column from the dataframe.
+  2. Keeps only numeric columns for model input.
+  3. Encodes class labels into numeric form.
+
+   Purpose:
+  Returns clean and ready-to-train data: (X, y).
+  """
     if label_col not in df.columns:
         raise ValueError(f"Label column '{label_col}' missing after attachment.")
     X = df.drop(columns=[label_col]).select_dtypes(include=[np.number])
@@ -171,6 +213,17 @@ def prepare_X_y(df, label_col):
 
 
 def eval_metrics(est, X_test, y_test):
+    """
+    Why:
+-To evaluate the trained model’s performance on unseen test data.
+
+    How:
+- Predicts class labels on test data.
+- Calculates common metrics: Accuracy, F1, Precision, and Recall.
+
+    Purpose:
+-Returns a dictionary summarizing key model performance scores.
+"""
     y_pred = est.predict(X_test)
     return {
         "accuracy": float(accuracy_score(y_test, y_pred)),
@@ -181,6 +234,24 @@ def eval_metrics(est, X_test, y_test):
 
 
 def run_training():
+    """
+    Why:
+  Main function to train and evaluate all machine learning models.
+
+    How:
+  1. Loads and prepares datasets (features + labels).
+  2. Splits data into training and test sets.
+  3. For each model:
+      - Builds a pipeline (scaler + model)
+      - Performs RandomizedSearchCV for hyperparameter tuning
+      - Trains model and evaluates test performance
+      - Saves the best model and training summary
+  4. Compiles all results into a single summary CSV file.
+
+    Purpose:
+  To automate the full training process and record the best model results
+  for later testing or deployment.
+  """
     df, label_col = load_and_attach_label(EMBEDDED_CSV, COMBINED_CSV)
     print(f"[INFO] Using label column: {label_col}")
 
