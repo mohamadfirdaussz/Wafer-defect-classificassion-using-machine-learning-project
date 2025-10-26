@@ -250,3 +250,20 @@
 #
 # if __name__ == '__main__':
 #     unittest.main(argv=['first-arg-is-ignored'], exit=False)
+
+# import pandas as pd
+#
+# df = pd.read_csv(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_engineering_results\combined_features.csv")
+# print(df.columns.tolist())
+# import pandas as pd
+#
+# df = pd.read_csv(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_engineering_results\combined_features.csv")
+#
+# # Find candidate target columns
+# candidates = [col for col in df.columns if df[col].nunique() < 20]  # assuming 20 or fewer classes
+# print("Candidate target columns:", candidates)
+import pandas as pd
+df = pd.read_csv("C:/Users/user/OneDrive - ums.edu.my/FYP 1/feature_selection_results/selected_features_embedded.csv")
+print(df.columns.tolist())
+
+

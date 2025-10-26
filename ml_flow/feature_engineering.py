@@ -1,162 +1,477 @@
-# feature_engineer.py
+"""
+Feature Engineering Module for Wafer Defect Classification
+=========================================================
+This script performs numerical feature extraction from cleaned wafer map data.
+It is part of the larger Wafer Defect Classification Pipeline (Step 2: Feature Engineering).
+────────────────────────────────────────────────────────────
+Overview
+────────────────────────────────────────────────────────────
+The module reads processed wafer data (CSV and NPZ format) and computes three categories of numerical features:
+1️⃣ Statistical Features
+- Describe pixel intensity distributions within wafer maps.
+- Includes mean, median, standard deviation, IQR, and entropy.
 
+2️⃣ Morphological (Geometric) Features
+- Describe shape, size, and spatial properties of detected defects.
+- Includes defect area, perimeter, aspect ratio, circularity, and symmetry.
+
+3️⃣ Frequency-Domain Features
+- Derived from Fourier analysis to capture periodic or cyclic defect patterns.
+- Includes spectral power, bandwidth, dominant frequency, and frequency energy ratios.
+────────────────────────────────────────────────────────────
+Inputs
+────────────────────────────────────────────────────────────
+• cleaned_data.csv → Metadata table (e.g., wafer IDs, defect classes, etc.)
+• cleaned_data.npz → Corresponding wafer maps as NumPy matrices
+
+────────────────────────────────────────────────────────────
+Outputs
+────────────────────────────────────────────────────────────
+• features.csv → Tabular dataset containing numeric features for each wafer.
+• features.npz → Compressed file containing:
+- X: 2D array of extracted features
+- columns: Feature names
+- wafer_ids: Matching wafer identifiers
+
+────────────────────────────────────────────────────────────
+Dependencies
+────────────────────────────────────────────────────────────
+- numpy, pandas → Statistical computation and table management
+- scipy.stats, scipy.signal → Entropy, IQR, spectral analysis
+- scikit-image (skimage.measure, skimage.morphology) → Region and shape metrics
+- cv2 (OpenCV) → Optional, for contour-based morphology extraction
+────────────────────────────────────────────────────────────
+Usage
+────────────────────────────────────────────────────────────
+Example execution (assuming prior data cleaning step):
+
+if __name__ == "__main__":
+feature_extractor = WaferFeatureExtractor(
+csv_path=r"C:\\Users\\user\\OneDrive - ums.edu.my\\FYP 1\\data_loader_results\\cleaned_data.csv",
+npz_path=r"C:\\Users\\user\\OneDrive - ums.edu.my\\FYP 1\\data_loader_results\\cleaned_data.npz"
+)
+feature_extractor.run()
+
+This will produce both `.csv` and `.npz` outputs under the same directory.
+────────────────────────────────────────────────────────────
+Note
+────────────────────────────────────────────────────────────
+- The extraction is purely numerical at this stage.
+- Feature values are normalized where applicable.
+- Suitable for direct use in model training (Step 5 of the pipeline).
+"""
+
+# ============================================================
+# IMPORTS
+# ============================================================
+# Core Python libraries
+from pathlib import Path
 import os
+import math
+from datetime import datetime
+# Data handling
 import numpy as np
 import pandas as pd
-from scipy.stats import entropy
+# ============================================================
+# OPTIONAL DEPENDENCIES
+# ============================================================
+# --- OpenCV (used for image morphology, contour, and geometric analysis) ---
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+# --- scikit-image (used for region labeling and shape feature extraction) ---
+try:
+    from skimage.measure import label, regionprops
+    from skimage.morphology import remove_small_objects
+except ImportError:
+    label = None
+    regionprops = None
+    remove_small_objects = None
+# --- SciPy (used for statistical and frequency-domain features) ---
+try:
+    from scipy.stats import skew, kurtosis, entropy
+    from scipy import fftpack
+except ImportError:
+    skew = None
+    kurtosis = None
+    entropy = None
+    fftpack = None
 
 
-class WaferFeatureEngineer:
+# --------------------
+# CONFIG - edit paths
+# --------------------
+BASE_DIR = Path(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1")
+CLEANED_CSV = BASE_DIR / "data_loader_results" / "cleaned_data.csv"
+CLEANED_NPZ = BASE_DIR / "data_loader_results" / "cleaned_data.npz"
+OUT_DIR = BASE_DIR / "feature_engineering_results"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+FEATURES_CSV = OUT_DIR / "features.csv"
+FEATURES_NPZ = OUT_DIR / "features.npz"
+
+# --------------------
+# Utilities
+# --------------------
+
+def safe_load_csv(path):
+    if not path.exists():
+        raise FileNotFoundError(f"CSV not found: {path}")
+    df = pd.read_csv(path)
+    print(f"[INFO] Loaded metadata CSV: {len(df)} rows, columns: {list(df.columns)}")
+    return df
+
+
+def safe_load_npz(path):
+    if not path.exists():
+        raise FileNotFoundError(f"NPZ not found: {path}")
+    arr = np.load(path, allow_pickle=True)
+    # Expecting wafer_maps saved under some key; look for common keys
+    keys = list(arr.files)
+    if not keys:
+        raise ValueError("NPZ file contains no arrays")
+    # prefer 'wafer_maps' or 'arr_0' or first
+    key = 'wafer_maps' if 'wafer_maps' in keys else keys[0]
+    wafer_maps = arr[key]
+    print(f"[INFO] Loaded NPZ: keys={keys}, using key='{key}', arrays={len(wafer_maps)}")
+    return wafer_maps
+
+
+def infer_square_dim(n):
+    d = int(math.isqrt(n))
+    return d if d * d == n else None
+
+# --------------------
+# Feature extractors
+# --------------------
+
+def stat_features(wafer_arr):
     """
-    Extracts meaningful features from preprocessed wafer defect datasets.
-    Performs two primary feature types:
-    1. Statistical features — derived from data distribution.
-    2. Geometric features — derived from spatial wafer defect structure.
+    Extract key statistical features from a 2D wafer map array.
+
+    This function takes a 2D wafer array (representing sensor or defect data)
+    and calculates several statistical measures that describe its overall pattern
+    and variation. These features help summarize the wafer’s condition for
+    further analysis or machine learning classification.
+
+    When run:
+    1. The 2D array is flattened into a 1D list of numbers.
+    2. Missing (NaN) values are removed.
+    3. Statistical values are computed, including:
+       - Mean, median, standard deviation, and variance (spread of data)
+       - Minimum and maximum (range)
+       - Skewness and kurtosis (shape of distribution)
+       - Entropy (randomness)
+       - Non-zero ratio (portion of active or defective pixels)
+    4. Returns all results in a dictionary for easy access.
+
+    Purpose:
+    Converts raw wafer map data into meaningful numerical features
+    that can be used for defect detection, quality monitoring,
+    or as inputs for machine learning models.
     """
-
-    def __init__(self, dataset_path: str):
-        """
-        Initialize the WaferFeatureEngineer with a dataset path.
-        :param dataset_path: File path to preprocessed wafer data (.csv).
-        """
-        self.dataset_path = dataset_path
-        self.data = None
-        self.features = pd.DataFrame()
-
-    def load_data(self) -> pd.DataFrame:
-        """
-        Load preprocessed wafer dataset from CSV into a pandas DataFrame.
-
-        Returns:
-            pd.DataFrame: Loaded wafer dataset.
-        Raises:
-            FileNotFoundError: If the dataset path does not exist.
-        """
-        if not os.path.exists(self.dataset_path):
-            raise FileNotFoundError(f"Dataset not found at {self.dataset_path}")
-
-        self.data = pd.read_csv(self.dataset_path)
-        print(f"[INFO] Loaded preprocessed dataset: {len(self.data)} samples")
-        return self.data
-
-    def compute_statistical_features(self) -> pd.DataFrame:
-        """
-        Compute statistical descriptors for each wafer sample.
-
-        Extracted features include:
-        - Mean and variance across wafer measurements.
-        - Entropy to measure randomness of wafer pixel intensity.
-        - High-to-low ratio: counts of high-intensity vs low-intensity pixels.
-
-        Returns:
-            pd.DataFrame: DataFrame containing statistical features.
-        Raises:
-            ValueError: If no numeric columns are found.
-        """
-        numeric_cols = self.data.select_dtypes(include=[np.number]).columns
-
-        if numeric_cols.empty:
-            raise ValueError("No numeric columns found for statistical feature extraction.")
-
-        stats_df = pd.DataFrame(index=self.data.index)
-        stats_df["stat_mean"] = self.data[numeric_cols].mean(axis=1)
-        stats_df["stat_var"] = self.data[numeric_cols].var(axis=1)
-
-        def calc_entropy(row):
-            """
-            Compute normalized histogram entropy for each wafer sample.
-            High entropy implies more defect spread and irregularity.
-            """
-            hist, _ = np.histogram(row, bins=10, range=(0, 1))
-            hist = hist / np.sum(hist) if np.sum(hist) > 0 else hist
-            return entropy(hist)
-
-        stats_df["stat_entropy"] = self.data[numeric_cols].apply(calc_entropy, axis=1)
-        stats_df["stat_high_low_ratio"] = (
-                (self.data[numeric_cols] > 0.8).sum(axis=1)
-                / ((self.data[numeric_cols] < 0.2).sum(axis=1) + 1)
-        )
-
-        print("[FEAT] Statistical features extracted.")
-        return stats_df
-
-    def compute_geometric_features(self) -> pd.DataFrame:
-        """
-        Compute geometric descriptors from wafer defect maps.
-
-        Extracted features include:
-        - Centroid (x, y) if wafer coordinates are available.
-        - Defect area: count of high-value points (>0.7).
-        - Symmetry score: measure of mirror asymmetry.
-        - Distribution index: ratio of defect area to symmetry score.
-
-        Returns:
-            pd.DataFrame: DataFrame containing geometric features.
-        """
-        geom_df = pd.DataFrame(index=self.data.index)
-
-        # Use wafer position columns if they exist, else default to zero
-        if {"die_x", "die_y"}.issubset(self.data.columns):
-            geom_df["centroid_x"] = self.data["die_x"]
-            geom_df["centroid_y"] = self.data["die_y"]
-        else:
-            geom_df["centroid_x"] = 0
-            geom_df["centroid_y"] = 0
-
-        # Derive shape-related metrics from numeric columns
-        numeric_cols = self.data.select_dtypes(include=[np.number]).columns
-        geom_df["defect_area"] = (self.data[numeric_cols] > 0.7).sum(axis=1)
-        geom_df["symmetry_score"] = np.abs(
-            self.data[numeric_cols].iloc[:, ::-1].values - self.data[numeric_cols].values
-        ).mean(axis=1)
-
-        geom_df["distribution_index"] = geom_df["defect_area"] / (
-                geom_df["symmetry_score"] + 1e-5
-        )
-
-        print("[FEAT] Geometric features extracted.")
-        return geom_df
-
-    def generate_feature_set(self) -> pd.DataFrame:
-        """
-        Run the full feature engineering process in sequence:
-        1. Load data.
-        2. Compute statistical features.
-        3. Compute geometric features.
-        4. Combine all features into a single dataset.
-
-        Returns:
-            pd.DataFrame: Final dataset containing original + derived features.
-        """
-        print("[STEP 1] Loading data...")
-        self.load_data()
-
-        print("[STEP 2] Computing statistical features...")
-        stat_features = self.compute_statistical_features()
-
-        print("[STEP 3] Computing geometric features...")
-        geom_features = self.compute_geometric_features()
-
-        print("[STEP 4] Combining all features...")
-        self.features = pd.concat([self.data, stat_features, geom_features], axis=1)
-        print(f"[DONE] Feature engineering complete. Final feature count: {self.features.shape[1]}")
-
-        return self.features
+    flat = wafer_arr.ravel().astype(float)
+    # ignore nan
+    flat = flat[~np.isnan(flat)]
+    if flat.size == 0:
+        return {
+            'mean': np.nan, 'median': np.nan, 'std': np.nan, 'var': np.nan,
+            'min': np.nan, 'max': np.nan, 'skew': np.nan, 'kurtosis': np.nan,
+            'entropy': np.nan, 'nonzero_ratio': np.nan
+        }
+    f_mean = float(np.mean(flat))
+    f_median = float(np.median(flat))
+    f_std = float(np.std(flat))
+    f_var = float(np.var(flat))
+    f_min = float(np.min(flat))
+    f_max = float(np.max(flat))
+    f_nonzero_ratio = float(np.sum(flat != 0) / flat.size)
+    # optional skew/kurtosis
+    f_skew = float(skew(flat)) if skew is not None else np.nan
+    f_kurt = float(kurtosis(flat)) if kurtosis is not None else np.nan
+    # discrete entropy over value counts
+    try:
+        vals, counts = np.unique(flat, return_counts=True)
+        f_entropy = float(entropy(counts)) if entropy is not None else np.nan
+    except Exception:
+        f_entropy = np.nan
+    return {
+        'mean': f_mean,
+        'median': f_median,
+        'std': f_std,
+        'var': f_var,
+        'min': f_min,
+        'max': f_max,
+        'skew': f_skew,
+        'kurtosis': f_kurt,
+        'entropy': f_entropy,
+        'nonzero_ratio': f_nonzero_ratio
+    }
 
 
-# Example usage
-if __name__ == "__main__":
+def morph_features(wafer_arr):
     """
-    Example demonstration:
-    - Loads preprocessed wafer dataset.
-    - Generates both statistical and geometric features.
-    - Saves the final feature dataset as CSV.
+Extract morphological (shape-based) features from a 2D wafer map array.
+
+This function analyzes the geometric properties of defect regions on the wafer
+by thresholding the image and calculating shape descriptors. These morphological
+features describe the size, shape, and structure of defects, helping to
+differentiate between various defect types or patterns.
+
+When run:
+1. The wafer array is copied and converted to float values.
+2. The median value is used as a threshold to separate defect pixels (high values)
+   from background pixels (low values).
+3. A binary mask is created where 1 = defect region, 0 = background.
+4. Connected regions (defects) are identified and analyzed to compute:
+   - Total area of all defect regions
+   - Number of defect objects
+   - Mean and maximum defect area
+   - Mean eccentricity (how elongated defects are)
+   - Mean compactness or circularity (how round defects are)
+   - Aspect ratio (width vs. height of defect regions)
+   - Perimeter (boundary length of defects)
+5. Returns all calculated morphological features as a dictionary.
+
+Purpose:
+Converts the wafer’s spatial defect patterns into numeric shape features.
+These features help machine learning models or quality inspection systems
+to detect and classify defect patterns more accurately.
+
+Notes:
+- Uses `skimage.regionprops` for shape measurements when available.
+- Falls back to OpenCV contour analysis (`cv2.findContours`) if skimage is not available.
+- If both methods fail, computes simple pixel-based measures as a last resort.
+"""
+    arr = wafer_arr.copy().astype(float)
+    # threshold using median
+    thr = np.nanmedian(arr)
+    mask = (arr > thr).astype(np.uint8)
+    # initialize defaults
+    out = {
+        'm_total_area': 0.0,
+        'm_n_objects': 0,
+        'm_mean_area': 0.0,
+        'm_max_area': 0.0,
+        'm_mean_eccentricity': 0.0,
+        'm_mean_compactness': 0.0,
+        'm_aspect_ratio': 0.0,
+        'm_perimeter': 0.0
+    }
+    try:
+        # try skimage regionprops first
+        if label is not None and regionprops is not None:
+            lbl = label(mask)
+            props = regionprops(lbl)
+            areas = []
+            eccs = []
+            compacts = []
+            perims = []
+            bboxes = []
+            for p in props:
+                areas.append(p.area)
+                perim = getattr(p, 'perimeter', 0.0)
+                if perim is None:
+                    perim = 0.0
+                perims.append(perim)
+                ecc = getattr(p, 'eccentricity', 0.0)
+                eccs.append(ecc)
+                if perim > 0:
+                    compacts.append(4 * math.pi * p.area / (perim * perim))
+                else:
+                    compacts.append(0.0)
+                bboxes.append(p.bbox)
+            if areas:
+                out['m_total_area'] = float(np.sum(areas))
+                out['m_n_objects'] = int(len(areas))
+                out['m_mean_area'] = float(np.mean(areas))
+                out['m_max_area'] = float(np.max(areas))
+                out['m_mean_eccentricity'] = float(np.mean(eccs)) if eccs else 0.0
+                out['m_mean_compactness'] = float(np.mean(compacts)) if compacts else 0.0
+                out['m_perimeter'] = float(np.sum(perims))
+                # aspect ratio: bbox of combined mask
+                ys, xs = np.where(mask)
+                if ys.size and xs.size:
+                    h = ys.max() - ys.min() + 1
+                    w = xs.max() - xs.min() + 1
+                    out['m_aspect_ratio'] = float(w / h) if h > 0 else 0.0
+            return out
+        # fallback: use cv2 contours if available
+        if cv2 is not None:
+            contours, _ = cv2.findContours(mask.astype('uint8'), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            areas = []
+            perims = []
+            compacts = []
+            for cnt in contours:
+                a = float(cv2.contourArea(cnt))
+                per = float(cv2.arcLength(cnt, True))
+                areas.append(a)
+                perims.append(per)
+                if per > 0:
+                    compacts.append(4 * math.pi * a / (per * per))
+            if areas:
+                out['m_total_area'] = float(np.sum(areas))
+                out['m_n_objects'] = int(len(areas))
+                out['m_mean_area'] = float(np.mean(areas))
+                out['m_max_area'] = float(np.max(areas))
+                out['m_mean_compactness'] = float(np.mean(compacts)) if compacts else 0.0
+                out['m_perimeter'] = float(np.sum(perims))
+                ys, xs = np.where(mask)
+                if ys.size and xs.size:
+                    h = ys.max() - ys.min() + 1
+                    w = xs.max() - xs.min() + 1
+                    out['m_aspect_ratio'] = float(w / h) if h > 0 else 0.0
+            return out
+    except Exception:
+        pass
+    # final fallback: simple pixel-based measures
+    total = float(np.sum(mask))
+    out['m_total_area'] = total
+    out['m_n_objects'] = int(total > 0)
+    out['m_mean_area'] = float(total)
+    out['m_max_area'] = float(total)
+    out['m_perimeter'] = float(np.sum(mask))
+    return out
+
+
+def freq_features(wafer_arr):
     """
-    engineer = WaferFeatureEngineer(
-        dataset_path=r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\LSWMD_1500_preprocessed.csv"
-    )
-    feature_data = engineer.generate_feature_set()
-    feature_data.to_csv(
-        r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_engineering_results\LSWMD_1500_features.csv", index=False
-    )
-    print("[SAVE] Feature dataset saved as LSWMD_1500_features.csv")
+     Extract frequency-domain features from a 2D wafer map using Fast Fourier Transform (FFT).
+
+     This function analyzes the wafer map in the frequency domain to capture
+     repetitive patterns or spatial variations that are not easily visible in
+     the raw image. By applying a 2D FFT, it transforms the wafer’s spatial
+     data into frequency components, allowing analysis of periodic defect patterns.
+
+     When run:
+     1. Converts the wafer map to float values.
+     2. Replaces any missing (NaN) values with the mean to prevent errors in FFT.
+     3. Performs a 2D Fast Fourier Transform (FFT) to move from spatial domain
+        (pixels) to frequency domain (patterns).
+     4. Shifts the FFT output so that the low frequencies appear in the center.
+     5. Computes key frequency-based features:
+        - `freq_total_power`: total magnitude (energy) of all frequency components.
+        - `freq_dom_row`, `freq_dom_col`: position of the dominant (strongest) frequency.
+        - `freq_bandwidth_bins`: number of frequency components above the mean power
+          (a proxy for how complex or spread-out the frequency spectrum is).
+        - `freq_low_energy_ratio`: ratio of low-frequency energy to total energy
+          (indicates whether patterns are smooth or highly detailed).
+     6. Returns all calculated values as a dictionary.
+
+     Purpose:
+     Converts wafer map spatial data into frequency-based features that describe
+     the periodicity, texture, and pattern complexity of defects.
+     These features complement statistical and morphological features for
+     better wafer defect pattern classification.
+
+     Notes:
+     - Uses NumPy’s built-in 2D FFT (`np.fft.fft2`) for transformation.
+     - Automatically handles missing data to ensure stable frequency computation.
+     - Returns NaN values if FFT computation fails.
+     """
+    try:
+        arr = wafer_arr.astype(float)
+        # fill NaN with mean to avoid NaN in FFT
+        if np.isnan(arr).any():
+            arr = np.where(np.isnan(arr), np.nanmean(arr), arr)
+        f = np.fft.fft2(arr)
+        fshift = np.fft.fftshift(f)
+        mag = np.abs(fshift)
+        total_power = float(np.sum(mag))
+        # dominant frequency location
+        idx = np.unravel_index(np.argmax(mag), mag.shape)
+        # bandwidth proxy: number of bins above mean
+        bw = int(np.sum(mag > mag.mean()))
+        # energy ratios: low-frequency center vs total
+        cy, cx = mag.shape[0] // 2, mag.shape[1] // 2
+        # take central block as low-freq region (±1/8 size)
+        h = mag.shape[0] // 8 or 1
+        w = mag.shape[1] // 8 or 1
+        low_block = mag[cy - h: cy + h + 1, cx - w: cx + w + 1]
+        low_energy = float(np.sum(low_block))
+        low_ratio = low_energy / total_power if total_power != 0 else 0.0
+        return {
+            'freq_total_power': total_power,
+            'freq_dom_row': int(idx[0]),
+            'freq_dom_col': int(idx[1]),
+            'freq_bandwidth_bins': bw,
+            'freq_low_energy_ratio': low_ratio
+        }
+    except Exception:
+        return {
+            'freq_total_power': np.nan,
+            'freq_dom_row': np.nan,
+            'freq_dom_col': np.nan,
+            'freq_bandwidth_bins': np.nan,
+            'freq_low_energy_ratio': np.nan
+        }
+
+# --------------------
+# Main pipeline
+# --------------------
+
+def run():
+    print("[STEP] Feature Engineering - started", datetime.now().isoformat())
+    meta = safe_load_csv(CLEANED_CSV)
+    wafer_maps = safe_load_npz(CLEANED_NPZ)
+
+    # Ensure lengths align; if wafer_maps is object array length == meta rows
+    if len(wafer_maps) != len(meta):
+        print(f"[WARN] wafer_maps length ({len(wafer_maps)}) != metadata rows ({len(meta)}). Attempting to align by index.")
+    # Prepare list for feature dicts
+    feats = []
+
+    for i, row in meta.reset_index(drop=True).iterrows():
+        # attempt to fetch wafer map by same index
+        try:
+            wm = wafer_maps[i]
+        except Exception:
+            # sometimes wafer_maps saved as list of arrays in a 1D array
+            try:
+                wm = wafer_maps.tolist()[i]
+            except Exception:
+                wm = None
+        if wm is None:
+            print(f"[WARN] missing wafer map at index {i}; features will be NaN")
+            feat = { 'index': i }
+            feat.update({k: np.nan for k in ['mean','median','std','var','min','max','skew','kurtosis','entropy','nonzero_ratio']})
+            feat.update({k: np.nan for k in ['m_total_area','m_n_objects','m_mean_area','m_max_area','m_mean_eccentricity','m_mean_compactness','m_aspect_ratio','m_perimeter']})
+            feat.update({k: np.nan for k in ['freq_total_power','freq_dom_row','freq_dom_col','freq_bandwidth_bins','freq_low_energy_ratio']})
+            feats.append(feat)
+            continue
+        # ensure numpy array
+        wm_arr = np.array(wm)
+        # if 1D try reshape if perfect square
+        if wm_arr.ndim == 1:
+            d = infer_square_dim(wm_arr.size)
+            if d:
+                wm_arr = wm_arr.reshape((d, d))
+        # compute features
+        s = stat_features(wm_arr)
+        m = morph_features(wm_arr)
+        f = freq_features(wm_arr)
+        feat = {'index': i}
+        feat.update(s); feat.update(m); feat.update(f)
+        # include metadata columns of interest (e.g., waferId, label) if present
+        # we will merge later using index
+        feats.append(feat)
+        if (i + 1) % 100 == 0:
+            print(f"[INFO] Processed {i+1} wafers")
+
+    feats_df = pd.DataFrame(feats).set_index('index')
+    # join with metadata (preserve metadata columns except waferMap if exists)
+    meta_idx = meta.reset_index(drop=True)
+    combined = pd.concat([meta_idx, feats_df.reset_index(drop=True)], axis=1)
+
+    # Save CSV and NPZ
+    combined.to_csv(FEATURES_CSV, index=False)
+    print(f"[SAVE] Features CSV saved to {FEATURES_CSV}")
+    # save numeric feature arrays in NPZ
+    numeric_cols = combined.select_dtypes(include=[np.number]).columns.tolist()
+    np.savez_compressed(FEATURES_NPZ, features=combined[numeric_cols].to_numpy(), columns=np.array(numeric_cols, dtype=object))
+    print(f"[SAVE] Numeric features saved to {FEATURES_NPZ}")
+    print("[DONE] Feature Engineering - finished", datetime.now().isoformat())
+
+
+if __name__ == '__main__':
+    run()

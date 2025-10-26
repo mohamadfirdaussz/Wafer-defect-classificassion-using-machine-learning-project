@@ -9,79 +9,12 @@ The system performs **data ingestion**, **preprocessing**, **feature selection**
 This repository contains the **first two stages** of the wafer defect classification pipeline:
 1. **Data Loading & Preprocessing** (`data_loader.py`)
 2. **Feature Engineering** (`feature_engineer.py`)
+3. .......
+4. .......
+5. ......to be continued
 
 
----
-## 📂 Project Structure
 
-[//]: # (FYP1/)
-
-[//]: # (│)
-
-[//]: # (├── data_loader.py # Load and preprocess raw wafer data)
-
-[//]: # (├── feature_engineer.py # Extract statistical and geometric features)
-
-[//]: # (│)
-
-[//]: # (├── data/)
-
-[//]: # (│ ├── LSWMD_1500.csv # Raw wafer dataset)
-
-[//]: # (│ ├── data_loader_results/)
-
-[//]: # (│ │ └── LSWMD_1500_preprocessed.csv)
-
-[//]: # (│ └── feature_engineering_results/)
-
-[//]: # (│ └── LSWMD_1500_features.csv)
-
-[//]: # (│)
-
-[//]: # (└── requirements.txt # Dependencies)
-
-[//]: # ()
-[//]: # (---Workflow Summary)
-
-[//]: # (┌──────────────────────────────┐)
-
-[//]: # (│   Raw wafer data &#40;.csv&#41;      │)
-
-[//]: # (└──────────────┬───────────────┘)
-
-[//]: # (│)
-
-[//]: # (▼)
-
-[//]: # (┌──────────────────────────────┐)
-
-[//]: # (│   data_loader.py             │)
-
-[//]: # (│   → cleaning, normalization  │)
-
-[//]: # (│   → noise filtering          │)
-
-[//]: # (└──────────────┬───────────────┘)
-
-[//]: # (│)
-
-[//]: # (▼)
-
-[//]: # (┌──────────────────────────────┐)
-
-[//]: # (│   feature_engineer.py        │)
-
-[//]: # (│   → statistical features     │)
-
-[//]: # (│   → geometric features       │)
-
-[//]: # (└──────────────┬───────────────┘)
-
-[//]: # (│)
-
-[//]: # (▼)
-
-[//]: # (mL)
 
 
 
