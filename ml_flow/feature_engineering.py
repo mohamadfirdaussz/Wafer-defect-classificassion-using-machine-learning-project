@@ -115,6 +115,31 @@ FEATURES_NPZ = OUT_DIR / "features.npz"
 # --------------------
 
 def safe_load_csv(path):
+    """
+    Safely load a CSV file into a pandas DataFrame.
+
+    Why:
+        This function ensures that the specified CSV file actually exists
+        before attempting to load it, preventing unexpected crashes during
+        data loading steps (common in machine learning pipelines).
+
+    How:
+        1. Checks if the given file path exists.
+        2. If the file is missing, raises a FileNotFoundError.
+        3. Reads the CSV using pandas.
+        4. Prints a short summary including the number of rows and column names.
+
+    Purpose:
+        To reliably load metadata or dataset information from a CSV file
+        while providing quick verification that the file has been correctly loaded.
+
+    Args:
+        path (Path): The path to the CSV file.
+
+    Returns:
+        pandas.DataFrame: The loaded DataFrame containing the CSV data.
+    """
+
     if not path.exists():
         raise FileNotFoundError(f"CSV not found: {path}")
     df = pd.read_csv(path)
@@ -123,6 +148,32 @@ def safe_load_csv(path):
 
 
 def safe_load_npz(path):
+    """
+    Safely load wafer map arrays from a compressed NumPy (.npz) file.
+
+    Why:
+        NPZ files are often used to store large numerical datasets efficiently.
+        This function ensures the file exists and that it contains valid arrays
+        before use — preventing silent loading errors or missing data issues.
+
+    How:
+        1. Verifies that the NPZ file path exists.
+        2. Loads the NPZ file with NumPy (allowing pickle objects if needed).
+        3. Lists all array keys contained in the file.
+        4. Selects the appropriate key ('wafer_maps' if available, otherwise first array).
+        5. Prints diagnostic information about loaded keys and array count.
+
+    Purpose:
+        To load wafer map matrices or other feature arrays safely and transparently,
+        ensuring the correct dataset structure for downstream processing or model training.
+
+    Args:
+        path (Path): The path to the NPZ file.
+
+    Returns:
+        numpy.ndarray: The loaded array of wafer maps or stored data.
+    """
+
     if not path.exists():
         raise FileNotFoundError(f"NPZ not found: {path}")
     arr = np.load(path, allow_pickle=True)
@@ -138,6 +189,32 @@ def safe_load_npz(path):
 
 
 def infer_square_dim(n):
+    """
+    Infer the side length of a square given its total number of elements.
+
+    Why:
+        In wafer map or image data, the total number of elements (pixels)
+        may be stored as a single flattened number. This function helps
+        reconstruct the original 2D square dimension if possible.
+
+    How:
+        1. Computes the integer square root of n.
+        2. Checks if squaring that result returns the original n.
+        3. If true, returns the dimension; otherwise returns None.
+
+    Purpose:
+        To identify whether a 1D array length corresponds to a perfect
+        square matrix (e.g., 4096 → 64×64), which is essential when
+        reshaping flattened data back into 2D form.
+
+    Args:
+        n (int): The total number of elements.
+
+    Returns:
+        int or None: The square dimension (e.g., 64) if valid,
+                     or None if n is not a perfect square.
+    """
+
     d = int(math.isqrt(n))
     return d if d * d == n else None
 
@@ -411,6 +488,34 @@ def freq_features(wafer_arr):
 # --------------------
 
 def run():
+    """
+Run the feature engineering process for wafer map data.
+
+Why:
+    This function is used to generate numerical features from cleaned wafer map data.
+    These features are important for training and testing machine learning models
+    that classify or detect wafer defects.
+
+How:
+    1. Load cleaned metadata (CSV) and wafer map arrays (NPZ).
+    2. Check if the number of wafer maps matches the metadata rows.
+    3. For each wafer sample:
+        - Retrieve its wafer map image.
+        - Reshape it if it’s a 1D array and can form a square.
+        - Extract features from three main categories:
+            a. Statistical features (mean, std, skew, etc.)
+            b. Morphological features (object area, compactness, etc.)
+            c. Frequency-domain features (FFT power, dominant frequency, etc.)
+    4. Combine all features with metadata into one DataFrame.
+    5. Save the results as:
+        - A CSV file for reference and inspection.
+        - A compressed NPZ file containing only numeric features for model input.
+
+Purpose:
+    To automatically convert raw wafer map data into structured numerical features
+    that can be used directly for machine learning or data analysis.
+"""
+
     print("[STEP] Feature Engineering - started", datetime.now().isoformat())
     meta = safe_load_csv(CLEANED_CSV)
     wafer_maps = safe_load_npz(CLEANED_NPZ)

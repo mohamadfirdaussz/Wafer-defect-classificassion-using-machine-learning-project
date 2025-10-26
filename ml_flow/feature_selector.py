@@ -16,9 +16,6 @@ Outputs:
 - selected_features_baseline.csv
 - selected_features_filter.csv
 - selected_features_embedded.csv
-
-Author: ChatGPT (GPT-5) for Hajii
-Date: 2025-10-26
 """
 
 import os
@@ -33,12 +30,40 @@ from sklearn.preprocessing import LabelEncoder
 
 class FeatureSelector:
     """
-    Performs feature selection across three tracks:
-    - Baseline: keep all features
-    - Filter/Wrapper: correlation filter + RFE
-    - Embedded: Lasso + Random Forest feature importance
-    """
+     A class for selecting the most useful features from a dataset
+     using multiple selection methods (Baseline, Filter/Wrapper, and Embedded).
+     ────────────────────────────────────────────────
+     OVERVIEW
+     Why:
+         Feature selection helps reduce redundant, noisy, or irrelevant
+         features — improving model accuracy and training speed.
+         This class combines several methods to ensure balanced feature filtering.
+
+     How it runs (Workflow):
+         1. **Load data** → Reads feature dataset and identifies label column.
+         2. **Baseline method** → Keeps all features as-is.
+         3. **Filter/Wrapper methods** →
+            - Remove highly correlated features (correlation filter)
+            *Buang ciri (feature) yang terlalu berkait rapat antara satu sama lain.
+            - Use Recursive Feature Elimination (RFE) for optimal subset
+         4. **Embedded methods** →
+            - LassoCV for sparsity-based selection
+            - RandomForest importance for ranking feature usefulness
+         5. Save or use the reduced feature set for model training.
+
+     Purpose:
+         To select the most meaningful and non-redundant features
+         from the engineered dataset, improving the efficiency and
+         performance of wafer defect classification models.
+     """
     def __init__(self, input_csv: str, output_dir: str):
+        """
+       Initialize the FeatureSelector and create output folder.
+
+       Args:
+           input_csv (str): Path to the input CSV file containing features.
+           output_dir (str): Folder where selected features or results will be saved.
+       """
         self.input_csv = Path(input_csv)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -47,6 +72,20 @@ class FeatureSelector:
         self.y = None
 
     def load_data(self):
+        """
+        Load the dataset and detect the target (label) column.
+        Why:
+            Feature selection requires separating predictors (X) from the target (y).
+
+        How:
+            - Reads the CSV file.
+            - Looks for a column that matches common label names
+              (e.g., 'failureType', 'label', 'target', 'class').
+            - Keeps only numeric columns for feature selection.
+
+        Purpose:
+            To prepare the dataset for supervised or unsupervised feature selection.
+        """
         print("[STEP 1] Loading combined features...")
         self.df = pd.read_csv(self.input_csv)
         print(f"[INFO] Loaded shape: {self.df.shape}")
@@ -70,7 +109,18 @@ class FeatureSelector:
     # 4A: Baseline
     # -------------------------------
     def baseline_all(self):
-        """Return all features without selection."""
+        """
+      Baseline method: return all features without selection.
+      Why:
+          Acts as a control version — useful for comparing the
+          performance difference after applying selection methods.
+
+      How:
+          Simply copies all numeric columns as the full feature set.
+
+      Purpose:
+          To keep all features for baseline model training or comparison.
+      """
         print("[4A] Baseline: keeping all features.")
         return self.X.copy()
 
@@ -78,7 +128,19 @@ class FeatureSelector:
     # 4B: Filter + Wrapper
     # -------------------------------
     def correlation_filter(self, threshold: float = 0.95):
-        """Remove highly correlated features (Pearson correlation)."""
+        """
+      Remove highly correlated features using Pearson correlation.
+      Why:
+          Highly correlated features carry similar information, which
+          can lead to redundancy and overfitting in models.
+
+      How:
+          - Computes pairwise correlation matrix.
+          - Removes one feature from each pair exceeding the given threshold.
+
+      Purpose:
+          To simplify the feature space by removing redundant features.
+      """
         print(f"[4B-1] Correlation filtering (threshold={threshold})...")
         corr = self.X.corr().abs()
         upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
@@ -88,7 +150,20 @@ class FeatureSelector:
         return X_filtered
 
     def rfe_selection(self, X_filtered: pd.DataFrame, n_features: int = 50):
-        """Recursive Feature Elimination using Logistic Regression."""
+        """
+       Apply Recursive Feature Elimination (RFE) using Logistic Regression.
+
+       Why:
+           RFE helps find the most predictive subset of features
+           by recursively removing less important ones.
+
+       How:
+           - Fits a logistic regression model.
+           - Iteratively removes the weakest features until the target number remains.
+
+       Purpose:
+           To choose a smaller set of features that best predict the target variable.
+       """
         if self.y is None:
             print("[WARN] No target available, skipping RFE.")
             return X_filtered
@@ -104,7 +179,19 @@ class FeatureSelector:
     # 4C: Embedded Methods
     # -------------------------------
     def lasso_selection(self, alpha_values=None):
-        """Feature selection using LassoCV."""
+        """
+       Perform feature selection using Lasso (L1 regularization).
+       Why:
+           Lasso automatically sets less important feature coefficients to zero,
+           effectively performing feature selection.
+
+       How:
+           - Uses cross-validation (LassoCV) to find the best alpha (penalty strength).
+           - Selects only features with non-zero coefficients.
+
+       Purpose:
+           To keep only the most influential features and remove noise.
+       """
         if self.y is None:
             print("[WARN] No target available, skipping Lasso.")
             return self.X
@@ -120,7 +207,20 @@ class FeatureSelector:
         return self.X[selected]
 
     def tree_based_selection(self, top_n=50):
-        """Feature selection using Random Forest importance ranking."""
+        """
+       Perform feature selection based on Random Forest importance.
+       Why:
+           Tree-based models can estimate how much each feature contributes
+           to prediction accuracy — useful for ranking feature usefulness.
+
+       How:
+           - Trains a RandomForestClassifier.
+           - Ranks features by their importance scores.
+           - Keeps only the top N most important features.
+
+       Purpose:
+           To retain the most significant features based on ensemble model evaluation.
+       """
         if self.y is None:
             print("[WARN] No target available, skipping tree-based selection.")
             return self.X
@@ -172,9 +272,12 @@ if __name__ == "__main__":
     selector = FeatureSelector(input_csv=input_csv, output_dir=output_dir)
     results = selector.run()
 
+
+# Baseline (1296, 1250)
+# → all 1 296 wafer samples with 1 250 original features kept (no selection).
 #
-# Baseline (1296, 1250) → all 1 296 wafer samples with 1 250 original features kept (no selection).
+# Filter (1296, 50)
+# → same 1 296 samples but reduced to 50 features after correlation and RFE filtering.
 #
-# Filter (1296, 50) → same 1 296 samples but reduced to 50 features after correlation and RFE filtering.
-#
-# Embedded (1296, 66) → same samples but 66 selected features (17 from Lasso + 49 from Random Forest, combined and deduplicated).
+# Embedded (1296, 66)
+# →same samples but 66 selected features (17 from Lasso + 49 from Random Forest, combined and deduplicated).
