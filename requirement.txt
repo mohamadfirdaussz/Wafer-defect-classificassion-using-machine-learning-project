@@ -6,14 +6,18 @@
 # pip install -r requirements.txt
 #
 
-# Core Data Science and Machine Learning Libraries
-matplotlib
-numpy
+#Machine Learning Libraries
 pandas
+numpy
+scipy
 scikit-image
 scikit-learn
-scipy
-tensorflow
+imbalanced-learn
+xgboost
+joblib
+tqdm
+seaborn
+matplotlib
 
 # Optional for interactive development and specific notebook features
 ipython

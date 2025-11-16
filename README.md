@@ -1,134 +1,118 @@
-# 🧠 SEMICONDUCTOR WAFER DEFECT CLASSIFICATION PIPELINE
+# Wafer Defect Classification ML Pipeline
 
-A modular end-to-end pipeline for **wafer defect classification** using traditional machine learning techniques.  
-The system performs **data ingestion**, **preprocessing**, **feature engineering**, **feature selection**, and **model training** with multiple classifiers and tuning strategies.
+This project details a complete, end-to-end machine learning pipeline for classifying defect patterns on silicon wafers from the **WM-811K (LSWMD) dataset**.
 
----
+The pipeline is designed to be modular, robust, and 100% free of data leakage. It successfully loads raw wafer images, engineers 65 numerical features, and runs a comprehensive "bake-off" between 7 different machine learning models and 3 different feature sets to find the optimal classification model.
 
-## 📁 PIPELINE OVERVIEW
 
-### 1️⃣ DATA INGESTION & PRE-PROCESSING
-**Module:** `data_loader.py`
-- Load wafer map datasets (e.g., **WM-811K**, or cleaned CSVs)
-- Handle missing or corrupted samples
-- Normalize and reshape wafer map matrices
-- Filter out invalid or noisy wafer patterns
-- Save preprocessed data to a structured CSV format
-
-**Outputs:**
-- `cleaned_data.csv` — metadata (e.g., wafer IDs, defect classes)
-- `cleaned_data.npz` — wafer maps stored as NumPy matrices
 
 ---
 
-### 2️⃣ FEATURE ENGINEERING
-**Module:** `feature_engineer.py`
+## 🏆 Final Results & Key Findings
 
-This stage computes **three categories** of numerical features from wafer maps:
+After running the full pipeline, we achieved a final **Test Accuracy of 84.67%**.
 
-#### 🧮 Statistical Features
-Describe pixel intensity distribution and global data variation.
-- Mean, Median, Standard Deviation, Variance
-- Minimum, Maximum, Skewness, Kurtosis
-- Entropy (Shannon information entropy)
-- Non-zero pixel ratio (defect density measure)
+### 1. Best Model & Feature Set
+The "bake-off" results clearly identified the best-performing combination.
 
-#### ⚙️ Morphological (Geometric) Features
-Describe the **shape, structure, and spatial properties** of wafer defects.
-- Total defect area and object count
-- Mean and maximum defect area
-- Mean eccentricity (elongation)
-- Mean compactness (circularity)
-- Aspect ratio (width-to-height ratio)
-- Total defect perimeter
+| Track | Best Model | CV F1-Score | Features |
+| :--- | :--- | :--- | :--- |
+| **4A_Baseline** | **XGBoost** | **0.8430** | **65** |
+| 4C_Embedded_RF | XGBoost | 0.8245 | 25 |
+| 4B_RFE | XGBoost | 0.8163 | 25 |
 
-#### 🎚️ Frequency-Domain Features
-Extracted using **2D Fast Fourier Transform (FFT)** to detect **periodic or repeating defect patterns**.
-- Total spectral power
-- Dominant frequency coordinates (row, col)
-- Frequency bandwidth (number of bins above mean)
-- Low-frequency energy ratio (smoothness vs. complexity indicator)
+* **Objective 1 (Optimal Feature Set):** The optimal feature set was the **`4A_Baseline`** track, which used **all 65 engineered features**. This proves that our feature engineering was highly effective and that the selection tracks (4B/4C) removed valuable information, hurting performance.
+* **Objective 2 (Compare Algorithms):** The optimal algorithm was **`XGBoost`** (`XGBClassifier`). It was the top-performing model on all three feature tracks, demonstrating its robustness for this tabular data.
 
-**Inputs:**
-- `cleaned_data.csv` — metadata table
-- `cleaned_data.npz` — wafer maps (NumPy arrays)
+### 2. Final Model Performance (on Unseen Test Data)
 
-**Outputs:**
-- `features.csv` — combined metadata and numerical features
-- `features.npz` — compressed NumPy arrays containing:
-    - `features`: numeric feature matrix
-    - `columns`: feature names
-    - `wafer_ids`: corresponding wafer indices
+The winning model (`XGBoost` on all 65 features) was evaluated one final time on the unseen test set.
 
-**Dependencies:**
-- `numpy`, `pandas`
-- `scipy.stats`, `scipy.signal` (for entropy, skew, FFT)
-- `scikit-image` (`regionprops`, `morphology`)
-- `opencv-python` (optional, fallback for contour detection)
+* **Overall Test Accuracy:** **84.67%**
+* **Weighted Avg F1-Score:** **0.85**
+
+**Performance by Class:**
+The model is extremely good at identifying clear patterns, with some confusion on the more ambiguous "local" defects.
+
+* **Excellent (>0.90 F1):** 'Edge-Ring' (0.95), 'Center' (0.93), 'Donut' (0.93), 'Random' (0.93)
+* **Good/Fair (<0.80 F1):** 'none' (0.80), 'Scratch' (0.75), 'Edge-Loc' (0.74), 'Loc' (0.73)
 
 ---
 
-### 3️⃣ FEATURE SELECTION
-**Module:** `feature_selector.py`  
-Selects the most relevant features using three tracks:
+## 🚀 Pipeline Workflow
 
-#### 3A — Baseline
-Use all numeric features without reduction.  
-➡️ Output: `features_3A_baseline.csv`
+The pipeline is broken into 8 distinct stages, executed by 5 scripts.
 
-#### 3B — Filter/Wrapper
-- Filter: ANOVA F-test (`SelectKBest`)
-- Wrapper: Recursive Feature Elimination (RFE) using Random Forest  
-  ➡️ Output: `features_3B_filter_wrapper.csv`
+### 1. `data_loader.py` (Data Loading & Balancing)
+* **Goal:** To load the raw `.pkl` file and create a clean, uniform, and perfectly balanced set of wafer map images.
+* **Actions:**
+    * Filters for labeled data, removes the 'Near-full' class.
+    * Denoises maps with a `median_filter` and resizes all to `(64, 64)`.
+    * Solves imbalance via **Majority Undersampling** to create a balanced dataset of 4,000 wafers (8 classes $\times$ 500 samples).
+* **Output:** `cleaned_balanced_wm811k.npz`
 
-#### 3C — Embedded
-- **Lasso (α=0.01)** for sparse linear selection
-- **Random Forest** for tree-based importance
-- Combines both for robust embedded feature extraction  
-  ➡️ Output: `features_3C_embedded.csv`
+### 2. `feature_engineering.py` (2D to 1D Conversion)
+* **Goal:** To convert the `(64, 64)` 2D images into a 1D feature table for traditional ML.
+* **Actions:**
+    * Uses `joblib` to process all 4,000 wafers in parallel.
+    * Generates **65 features** for each wafer: 13 Density, 40 Radon, 6 Geometric, and 6 Statistical features.
+* **Output:** `features_dataset.csv`
 
-> ⚙️ LassoCV replaced with fixed α=0.01 for faster runtime on large datasets.
+### 3. `data_preprocessor.py` (The Leak-Proof Split)
+* **Goal:** To split data into training/test sets and apply scaling, preventing all data leakage.
+* **Actions:**
+    1.  **Critical Split:** The data is **IMMEDIATELY** split (70/30) using `stratify=y`.
+    2.  **Scale (No Leakage):** A `StandardScaler` is `fit` **ONLY** on `X_train`.
+    3.  **Transform:** The *fitted* scaler is then used to `transform` **both** `X_train` and `X_test`.
+* **Output:** `model_ready_data.npz`
+
+### 4. `feature_selection_multi_track.py` (Finding the Best Features)
+* **Goal:** To create multiple "experimental" datasets to test which feature set is optimal.
+* **Actions:**
+    * All selectors are `fit` **ONLY** on `X_train` to prevent data leakage.
+    * **Track 4A (Baseline):** Keeps all 65 features.
+    * **Track 4B (RFE):** Selects the top 25 features.
+    * **Track 4C (Random Forest):** Selects the top 25 features.
+    * **Track 4D (L1/Lasso):** (Found that all 65 features were valuable).
+* **Output:** Four separate `.npz` files (one for each track).
+
+### 5. `model_tuning.py` (Model Training & Tuning)
+* **Goal:** To run a "bake-off" to find the single best-performing combination of features and model.
+* **Actions:**
+    * **Outer Loop:** Loops through each feature set (4A, 4B, 4C).
+    * **Inner Loop:** Trains and tunes all 7 classifiers: **SVM, DT, RF, KNN, LR, GBM, and XGBoost**.
+    * **Tuning:** Uses `GridSearchCV` with `StratifiedKFold` on the `X_train` data to find the best hyperparameters.
+* **Output:** The single best-trained model (`best_overall_model.joblib`) and a summary (`model_bakeoff_summary.csv`).
+
+### 6. Evaluation
+* **Goal:** To get a final, honest performance score.
+* **Actions:**
+    * The winning model (`XGBoost`) was loaded.
+    * Its corresponding *unseen* test data (`X_test` from Track 4A) was loaded.
+    * `.predict()` was run **one time** to get the final scores.
+    * A **Confusion Matrix** and **Classification Report** were generated.
+
+### 7. Reporting
+* **Goal:** To save all results, artifacts, and the final model.
+* **Artifacts Saved:**
+    * `model_bakeoff_summary.csv`: The summary table of all model results.
+    * `final_classification_report.txt`: The final precision/recall/F1 report.
+    * `final_confusion_matrix.png`: The heatmap of the final model's predictions.
+    * `best_overall_model.joblib`: The final, trained XGBoost model, ready for deployment.
+
+### 8. Deployment & Monitoring (Future Work)
+* **Goal:** To serve the trained model and ensure it maintains performance over time.
+* **Next Steps:**
+    * Load `best_overall_model.joblib` into a production environment (e.g., an API).
+    * **Objective 3:** Test the model's generalizability on a new, different defect dataset.
+    * Monitor for data drift or model drift using a tool like Evidently AI.
 
 ---
 
-### 4️⃣ MODEL TRAINING & HYPERPARAMETER TUNING
-**Module:** `model_runner.py`
+## ⚙️ Requirements
 
-**Classifiers:**
-- Support Vector Machine (SVM)
-- Random Forest (RF)
-- Gradient Boosting (GBM)
-- XGBoost
-- Decision Tree (DT)
-- K-Nearest Neighbors (KNN)
-- Logistic Regression (LR)
+This project requires Python 3.8+. All dependencies are listed in `requirements.txt`.
 
-**Techniques:**
-- Stratified K-Fold Cross-Validation
-- GridSearchCV and RandomizedSearchCV for hyperparameter tuning
-- Metrics: Accuracy, F1-score, Precision, Recall, Confusion Matrix
-
-**Outputs:**
-- Best model per algorithm
-- Model performance summary table
-
----
-
-### 5️⃣ RESULT STORAGE & ANALYSIS
-**Module:** `main.py`
-
-Consolidates and compares results from all feature selection tracks and classifiers.
-
-**Outputs:**
-- `model_performance_summary.csv`
-- `feature_importance_summary.csv`
-- `best_model.pkl`
-
-**Final Report Includes:**
-- Top-performing model
-- Ranked feature importances
-- Cross-model performance comparison
-
----
-
-## ⚙️ DIRECTORY STRUCTURE
+```bash
+# Install all required libraries
+pip install -r requirements.txt

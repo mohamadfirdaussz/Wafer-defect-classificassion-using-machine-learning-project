@@ -36,40 +36,66 @@
 # except Exception as e:
 #     raise RuntimeError(f"[ERROR] Failed to save new pickle file: {e}")
 
+
+
+# npz_to_csv.py
+# ─────────────────────────────────────────────
+# Convert cleaned wafer map dataset (.npz) to CSV files
+# X_train, X_test, y_train, y_test → CSV
+# Each wafer map will be flattened into a single row (for traditional ML)
+
+import numpy as np
 import pandas as pd
 import os
 
-# === Configuration ===
-input_path = "C:/Users/user/OneDrive - ums.edu.my/FYP 1/LSWMD_1500.pkl"   # 🔹 Change to your actual .pkl file path
-output_path = "C:/Users/user/OneDrive - ums.edu.my/FYP 1/LSWMD_1500.csv"
+# ─────────────────────────────────────────────
+# 1️⃣ Load .npz file
+# ─────────────────────────────────────────────
 
-# === Step 1: Load PKL file safely ===
-print("[STEP 1] Loading dataset using pandas...")
-try:
-    data = pd.read_pickle(input_path)
-    print(f"[INFO] Dataset loaded successfully. Shape: {data.shape}")
-except Exception as e:
-    print(f"[ERROR] Failed to load PKL file: {e}")
-    exit()
+npz_path = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\cleaned_balanced_wm811k.npz"
+save_dir = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\csv_files"
 
-# === Step 2: Convert to DataFrame (if not already) ===
-if not isinstance(data, pd.DataFrame):
-    print("[INFO] Data is not a DataFrame. Attempting conversion...")
-    try:
-        data = pd.DataFrame(data)
-        print("[INFO] Conversion to DataFrame successful.")
-    except Exception as e:
-        print(f"[ERROR] Could not convert data to DataFrame: {e}")
-        exit()
+os.makedirs(save_dir, exist_ok=True)
 
-# === Step 3: Take only first 1500 rows ===
-subset = data.head(1500)
-print(f"[STEP 2] Selected first 1500 rows. Shape: {subset.shape}")
+data = np.load(npz_path, allow_pickle=True)
 
-# === Step 4: Save as CSV ===
-try:
-    subset.to_csv(output_path, index=False)
-    print(f"[STEP 3] Successfully saved CSV: {os.path.abspath(output_path)}")
-except Exception as e:
-    print(f"[ERROR] Failed to save CSV: {e}")
+X_train = data["X_train"]
+X_test = data["X_test"]
+y_train = data["y_train"]
+y_test = data["y_test"]
 
+# ─────────────────────────────────────────────
+# 2️⃣ Flatten wafer maps for CSV
+# ─────────────────────────────────────────────
+
+def flatten_wafer_maps(X):
+    """
+    Convert each 2D wafer map into a 1D array.
+    """
+    return np.array([x.flatten() for x in X])
+
+X_train_flat = flatten_wafer_maps(X_train)
+X_test_flat = flatten_wafer_maps(X_test)
+
+# ─────────────────────────────────────────────
+# 3️⃣ Convert to DataFrame
+# ─────────────────────────────────────────────
+
+df_train = pd.DataFrame(X_train_flat)
+df_train["label"] = y_train
+
+df_test = pd.DataFrame(X_test_flat)
+df_test["label"] = y_test
+
+# ─────────────────────────────────────────────
+# 4️⃣ Save to CSV
+# ─────────────────────────────────────────────
+
+train_csv_path = os.path.join(save_dir, "X_train.csv")
+test_csv_path = os.path.join(save_dir, "X_test.csv")
+
+df_train.to_csv(train_csv_path, index=False)
+df_test.to_csv(test_csv_path, index=False)
+
+print(f"✅ CSV files saved to: {save_dir}")
+print(f"Train shape: {df_train.shape}, Test shape: {df_test.shape}")
