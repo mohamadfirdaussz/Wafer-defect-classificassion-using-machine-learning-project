@@ -35,6 +35,38 @@ Outputs
     - A compressed file containing all 4 final arrays.
 • standard_scaler.joblib
     - The scaler object fit on the training data.
+
+
+This script is **STEP 3** of the ML pipeline.
+
+Why is this script critical? **To prevent data leakage.**
+Its one and only job is to take the 65-feature CSV (from Step 2)
+and create the final, scaled, and balanced datasets for modeling.
+
+It follows the "Golden Rule" of ML:
+**Split the data first** *before* you fit any scalers or resamplers
+(like SMOTE). This ensures your test set remains a 100% "unseen"
+dataset for a valid, final evaluation.
+
+How to Run:
+- Set the `INPUT_CSV` and `OUTPUT_DIR` paths in the
+  `if __name__ == "__main__":` block at the bottom.
+- Run this script directly from your terminal:
+  `python data_preprocessor.py`
+
+────────────────────────────────────────────
+Inputs
+────────────────────────────────────────────
+• features_dataset.csv (from feature_engineering.py)
+
+────────────────────────────────────────────
+Outputs
+────────────────────────────────────────────
+• model_ready_data.npz
+    - A compressed file containing the final 4 arrays:
+      (X_train, y_train, X_test, y_test)
+• standard_scaler.joblib
+    - The scaler object that was fit ONLY on the training data.
 """
 
 import os
@@ -55,7 +87,18 @@ def prepare_data_for_modeling(
     random_seed: int = 42
 ):
     """
-    Loads, splits, scales, and resamples the feature data.
+    This is the main controller function that executes the
+    full "leak-proof" preprocessing workflow.
+
+    Why the order is important:
+    1.  **Split First:** We split into train/test sets *immediately*.
+        The test set is now "locked away" and is never used for fitting.
+    2.  **Scale Second:** We `fit` the StandardScaler *only* on the
+        training data to learn its mean/std. We then use that *same*
+        fitted scaler to `transform` both the train and test sets.
+    3.  **SMOTE Last:** We apply SMOTE *only* to the scaled training
+        data. We never, ever apply SMOTE to the test set, as that
+        would "leak" fake data into our final evaluation.
     """
     print("--- Starting Data Preparation for Modeling ---")
     
@@ -81,7 +124,8 @@ def prepare_data_for_modeling(
     print(f"Separated {X.shape[1]} features (X) and labels (y).")
 
     # =========================================
-    # 3️⃣ ❗ CRITICAL: Train-Test Split (with Stratify)
+    # 3️⃣ ❗ CRITICAL: Train-Test Split (with Stratify)#The 70/30 split is used because it provides the model with enough data (70%) 
+    # to learn the complex defect patterns while reserving a statistically significant portion (30%) for a reliable, unbiased final evaluation.
     # =========================================
     print(f"Splitting data... (test_size={test_split_size}, stratify=y)")
     X_train, X_test, y_train, y_test = train_test_split(
@@ -121,7 +165,7 @@ def prepare_data_for_modeling(
         print(f"Training set size before SMOTE: {len(y_train)}")
         print(f"Training set size after SMOTE: {len(y_train_resampled)}")
     except Exception as e:
-        print(f"⚠️ SMOTE failed (likely due to a class having < {smote.k_neighbors} samples).")
+        print(f"⚠️ SMOTE failed (likely due to a class having < {smote.k_neighbors+1} samples).")
         print("Proceeding without SMOTE. Your 'data_loader.py' undersampling might be sufficient.")
         print(f"Error: {e}")
         X_train_resampled, y_train_resampled = X_train_scaled, y_train
@@ -151,6 +195,18 @@ def prepare_data_for_modeling(
 
 
 if __name__ == "__main__":
+    """
+    How to Run This Script:
+
+    This is the script's entry point. When you run
+    `python data_preprocessor.py` in your terminal, the code
+    inside this block is executed.
+
+    1.  It defines the file paths for your input CSV (`INPUT_CSV`)
+        and your output directory (`OUTPUT_DIR`).
+    2.  It calls the main `prepare_data_for_modeling` function
+        to run the entire pipeline with your chosen 30% test split.
+    """
     
     # Define paths
     INPUT_CSV = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_engineering_results\features_dataset.csv"

@@ -1,118 +1,120 @@
-# Wafer Defect Classification ML Pipeline
+# 🏭 WM-811K Wafer Defect Classification Pipeline
 
-This project details a complete, end-to-end machine learning pipeline for classifying defect patterns on silicon wafers from the **WM-811K (LSWMD) dataset**.
+## 🎯 Project Overview
+This project implements a robust, end-to-end Machine Learning pipeline for classifying **8 types of wafer defects** using the WM-811K dataset. 
 
-The pipeline is designed to be modular, robust, and 100% free of data leakage. It successfully loads raw wafer images, engineers 65 numerical features, and runs a comprehensive "bake-off" between 7 different machine learning models and 3 different feature sets to find the optimal classification model.
+The pipeline is engineered to address specific challenges in semiconductor defect detection, including class imbalance, noisy data, and complex non-linear feature relationships. It features advanced **Feature Expansion** (generating over 8,000 features) and a rigorous **Multi-Track Feature Selection** strategy to identify the optimal predictors.
 
 
 
----
+[Image of semiconductor wafer defect patterns]
 
-## 🏆 Final Results & Key Findings
-
-After running the full pipeline, we achieved a final **Test Accuracy of 84.67%**.
-
-### 1. Best Model & Feature Set
-The "bake-off" results clearly identified the best-performing combination.
-
-| Track | Best Model | CV F1-Score | Features |
-| :--- | :--- | :--- | :--- |
-| **4A_Baseline** | **XGBoost** | **0.8430** | **65** |
-| 4C_Embedded_RF | XGBoost | 0.8245 | 25 |
-| 4B_RFE | XGBoost | 0.8163 | 25 |
-
-* **Objective 1 (Optimal Feature Set):** The optimal feature set was the **`4A_Baseline`** track, which used **all 65 engineered features**. This proves that our feature engineering was highly effective and that the selection tracks (4B/4C) removed valuable information, hurting performance.
-* **Objective 2 (Compare Algorithms):** The optimal algorithm was **`XGBoost`** (`XGBClassifier`). It was the top-performing model on all three feature tracks, demonstrating its robustness for this tabular data.
-
-### 2. Final Model Performance (on Unseen Test Data)
-
-The winning model (`XGBoost` on all 65 features) was evaluated one final time on the unseen test set.
-
-* **Overall Test Accuracy:** **84.67%**
-* **Weighted Avg F1-Score:** **0.85**
-
-**Performance by Class:**
-The model is extremely good at identifying clear patterns, with some confusion on the more ambiguous "local" defects.
-
-* **Excellent (>0.90 F1):** 'Edge-Ring' (0.95), 'Center' (0.93), 'Donut' (0.93), 'Random' (0.93)
-* **Good/Fair (<0.80 F1):** 'none' (0.80), 'Scratch' (0.75), 'Edge-Loc' (0.74), 'Loc' (0.73)
 
 ---
 
-## 🚀 Pipeline Workflow
+## 🔬 Key Methodological Features
 
-The pipeline is broken into 8 distinct stages, executed by 5 scripts.
+### 1. Leak-Proof Preprocessing
+To prevent **Data Leakage** (a common pitfall where information from the test set bleeds into training), this pipeline enforces a strict order of operations:
+* **Split First:** Data is split into Train/Test sets *before* any scaling or oversampling.
+* **Fit on Train Only:** Scaling (StandardScaler) and Oversampling (SMOTE) are fitted **exclusively** on the Training set.
+* **Transform Test:** The Test set remains completely "unseen" until the final model evaluation.
 
-### 1. `data_loader.py` (Data Loading & Balancing)
-* **Goal:** To load the raw `.pkl` file and create a clean, uniform, and perfectly balanced set of wafer map images.
-* **Actions:**
-    * Filters for labeled data, removes the 'Near-full' class.
-    * Denoises maps with a `median_filter` and resizes all to `(64, 64)`.
-    * Solves imbalance via **Majority Undersampling** to create a balanced dataset of 4,000 wafers (8 classes $\times$ 500 samples).
+### 2. Massive Feature Expansion (Stage 3.5)
+We go beyond standard features by mathematically combining them to capture interaction effects.
+* **Result:** Expands the feature space from **65** to **~8,300+ features**.
+* **Benefit:** Exposes hidden relationships (e.g., *Density* × *Area*) that linear models might otherwise miss.
+
+### 3. Two-Stage Feature Selection (Stage 4)
+To handle the massive feature set efficiently without crashing memory, we implement a **Pre-Filtering** strategy:
+1.  **Filter (Fast):** ANOVA (f_classif) quickly reduces 8,000+ features $\rightarrow$ 2,000.
+2.  **Wrapper (Precise):** Recursive Feature Elimination (RFE) runs on the reduced set to find the top 25.
+
+---
+
+## 🚀 Detailed Pipeline Walkthrough
+
+The pipeline consists of 5 sequential stages. Each script relies on the output of the previous one.
+
+### 1️⃣ Stage 1: Data Loading & Cleaning
+* **Script:** `data_loader.py`
+* **The Problem:** The raw dataset is messy, mostly unlabeled, and highly imbalanced (thousands of 'none' vs. few 'Scratch').
+* **The Solution:**
+    * **Label Filtering:** Drops unlabeled wafers.
+    * **Denoising:** Applies a **Median Filter** to remove random "salt-and-pepper" noise pixels.
+    * **Resizing:** Standardizes all maps to **64x64**.
+    * **Undersampling:** Limits majority classes to 500 samples to fix immediate imbalance.
 * **Output:** `cleaned_balanced_wm811k.npz`
 
-### 2. `feature_engineering.py` (2D to 1D Conversion)
-* **Goal:** To convert the `(64, 64)` 2D images into a 1D feature table for traditional ML.
-* **Actions:**
-    * Uses `joblib` to process all 4,000 wafers in parallel.
-    * Generates **65 features** for each wafer: 13 Density, 40 Radon, 6 Geometric, and 6 Statistical features.
+### 2️⃣ Stage 2: Feature Engineering
+* **Script:** `feature_engineering.py`
+* **The Problem:** Raw images are just grids of numbers. ML models need high-level descriptors.
+* **The Solution:** Extracts **65 Base Features**:
+    1.  **Density (13):** Defect density in 13 spatial regions (inner, outer, etc.).
+    2.  **Radon (40):**  Projects images at angles to detect **lines** (crucial for 'Scratch' defects).
+    3.  **Geometry (6):** Properties of the largest defect blob (Area, Perimeter, Solidity).
+    4.  **Statistics (6):** Mean, Variance, Skewness, Kurtosis.
 * **Output:** `features_dataset.csv`
 
-### 3. `data_preprocessor.py` (The Leak-Proof Split)
-* **Goal:** To split data into training/test sets and apply scaling, preventing all data leakage.
-* **Actions:**
-    1.  **Critical Split:** The data is **IMMEDIATELY** split (70/30) using `stratify=y`.
-    2.  **Scale (No Leakage):** A `StandardScaler` is `fit` **ONLY** on `X_train`.
-    3.  **Transform:** The *fitted* scaler is then used to `transform` **both** `X_train` and `X_test`.
+### 3️⃣ Stage 3: Leak-Proof Preprocessing
+* **Script:** `data_preprocessor.py`
+* **The Problem:** Preparing data for training without "cheating" (leakage).
+* **The Solution:**
+    * **Stratified Split:** 70% Train / 30% Test.
+    * **Scaling:** `StandardScaler` fit on Train, applied to Test.
+    * **SMOTE:**  Generates synthetic minority samples **only** in the Training set.
 * **Output:** `model_ready_data.npz`
 
-### 4. `feature_selection_multi_track.py` (Finding the Best Features)
-* **Goal:** To create multiple "experimental" datasets to test which feature set is optimal.
-* **Actions:**
-    * All selectors are `fit` **ONLY** on `X_train` to prevent data leakage.
-    * **Track 4A (Baseline):** Keeps all 65 features.
-    * **Track 4B (RFE):** Selects the top 25 features.
-    * **Track 4C (Random Forest):** Selects the top 25 features.
-    * **Track 4D (L1/Lasso):** (Found that all 65 features were valuable).
-* **Output:** Four separate `.npz` files (one for each track).
+### 4️⃣ Stage 3.5: Feature Expansion
+* **Script:** `feature_combination.py`
+* **The Problem:** Simple features don't capture how variables interact.
+* **The Solution:** Mathematically combines the 65 base features.
+    * **Operations:** Sum (+), Difference (-), Ratio (÷), Product ($\times$).
+    * **Optimization:** Removed Absolute Difference ($|\Delta|$) to optimize speed.
+* **Output:** `data_track_4E_..._Train.csv` (Massive ~8,300 column CSVs).
 
-### 5. `model_tuning.py` (Model Training & Tuning)
-* **Goal:** To run a "bake-off" to find the single best-performing combination of features and model.
-* **Actions:**
-    * **Outer Loop:** Loops through each feature set (4A, 4B, 4C).
-    * **Inner Loop:** Trains and tunes all 7 classifiers: **SVM, DT, RF, KNN, LR, GBM, and XGBoost**.
-    * **Tuning:** Uses `GridSearchCV` with `StratifiedKFold` on the `X_train` data to find the best hyperparameters.
-* **Output:** The single best-trained model (`best_overall_model.joblib`) and a summary (`model_bakeoff_summary.csv`).
+### 5️⃣ Stage 4: Feature Selection
+* **Script:** `feature_selection.py`
+* **The Problem:** 8,300 features create the "Curse of Dimensionality" (slow training, overfitting).
+* **The Solution:** Creates 4 optimized "Tracks" for comparison:
+    * **Track 4A (Baseline):** All 8,300+ features.
+    * **Track 4B (Wrapper):** ANOVA Pre-filter $\rightarrow$ RFE (Logistic Regression).
+    * **Track 4C (Embedded):** Random Forest Importance.
+    * **Track 4D (Embedded):** Lasso (L1) Regularization.
+* **Output:** Optimized `.npz` files for each track.
 
-### 6. Evaluation
-* **Goal:** To get a final, honest performance score.
-* **Actions:**
-    * The winning model (`XGBoost`) was loaded.
-    * Its corresponding *unseen* test data (`X_test` from Track 4A) was loaded.
-    * `.predict()` was run **one time** to get the final scores.
-    * A **Confusion Matrix** and **Classification Report** were generated.
+### 6️⃣ Stage 5: Model Tuning & Evaluation
+* **Script:** `model_tuning.py`
+* **The Problem:** Determining the best Algorithm and Hyperparameters.
+* **The Solution:**
+    * **The Bake-Off:** Trains 7 classifiers (XGBoost, RF, SVM, etc.) on all 4 tracks.
+    * **Tuning:** Uses `GridSearchCV` with 5-Fold Cross-Validation.
+    * **Final Eval:** The single winner is evaluated **once** on the unseen Test Set.
+    * **Visuals:** Generates Confusion Matrix and Classification Report. 
+* **Output:** Final Model Artifacts.
 
-### 7. Reporting
-* **Goal:** To save all results, artifacts, and the final model.
-* **Artifacts Saved:**
-    * `model_bakeoff_summary.csv`: The summary table of all model results.
-    * `final_classification_report.txt`: The final precision/recall/F1 report.
-    * `final_confusion_matrix.png`: The heatmap of the final model's predictions.
-    * `best_overall_model.joblib`: The final, trained XGBoost model, ready for deployment.
-
-### 8. Deployment & Monitoring (Future Work)
-* **Goal:** To serve the trained model and ensure it maintains performance over time.
-* **Next Steps:**
-    * Load `best_overall_model.joblib` into a production environment (e.g., an API).
-    * **Objective 3:** Test the model's generalizability on a new, different defect dataset.
-    * Monitor for data drift or model drift using a tool like Evidently AI.
+---
+### project structure 
+*
+```bash
+Project_Root/
+├── src/
+│   ├── data_loader.py
+│   ├── feature_engineering.py
+│   ├── data_preprocessor.py
+│   ├── feature_combination.py  <-- (Expansion)
+│   ├── feature_selection.py    <-- (Selection)
+│   └── model_tuning.py         <-- (Modeling)
+├── preprocessing_results/      <-- Intermediate NPZs
+├── feature_selection_results/  <-- Expanded CSVs & Final Tracks
+└── model_artifacts/            <-- Final Model & Reports
+*
 
 ---
 
-## ⚙️ Requirements
 
-This project requires Python 3.8+. All dependencies are listed in `requirements.txt`.
+## 💻 Installation & Usage
 
+### 1. Requirements
 ```bash
-# Install all required libraries
-pip install -r requirements.txt
+pip install numpy pandas scikit-learn matplotlib seaborn imbalanced-learn xgboost joblib tqdm scikit-image

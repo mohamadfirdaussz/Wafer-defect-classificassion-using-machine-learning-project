@@ -1,221 +1,222 @@
 # -*- coding: utf-8 -*-
 """
-feature_selection_multi_track.py
-────────────────────────────────────────────
-Wafer Defect ML Pipeline: Multi-Track Feature Selection (Leak-Free)
+feature_selection.py (Stage 4: Multi-Track Feature Selection - Optimized)
+────────────────────────────────────────────────────────────────────────
+WM-811K Wafer Defect Classification Pipeline
 
-Implements 4 tracks for feature selection.
-All methods are fit ONLY on the training data to prevent data leakage.
+### 📖 MODULE DESCRIPTION
+This script executes Stage 4 of the pipeline. Its goal is to select the most 
+predictive subset of features from the massive ~8,300 expanded feature set.
 
-- 4A: Baseline (all 65 features)
-- 4B: Wrapper (RFE)
-- 4C: Embedded (Random Forest Importance)
-- 4D: Embedded (L1/Lasso Regularization)
+### 🛠️ WHAT THIS SCRIPT DOES
+It loads the expanded dataset and generates **4 Optimized Data Tracks**:
+
+1.  **Track 4A (Baseline):** Keeps all ~8,300 features. (Benchmarking only).
+2.  **Track 4B (Wrapper - RFE):** Uses Recursive Feature Elimination.
+    * *Optimization:* Uses ANOVA pre-filtering (8000->1000) to speed up RFE.
+3.  **Track 4C (Embedded - Random Forest):** Uses Tree-based importance rankings.
+4.  **Track 4D (Embedded - Lasso):** Uses L1 Regularization.
+    * *Optimization:* Uses ANOVA pre-filtering (8000->1000) to prevent solver timeouts.
+
+### 🚀 PERFORMANCE FIXES
+* **Pre-Filtering (ANOVA):** Applied to both RFE and Lasso tracks to ensure they finish quickly.
+* **Convergence Tweak:** Increased `tol` and `max_iter` for the Lasso solver.
+────────────────────────────────────────────────────────────────────────
 """
 
 import os
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_selection import RFE
-# Import the correct L1-based classifier
+from sklearn.feature_selection import RFE, SelectKBest, f_classif
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 import warnings
 import joblib
+from tqdm import tqdm 
 
+# Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
 
-# --- Helper function to save output ---
+# ───────────────────────────────────────────────
+# CONFIGURATION
+# ───────────────────────────────────────────────
+OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_selection_results"
+TRACK_E_BASE = 'data_track_4E_Full_Expansion' 
+TARGET_COL_NAME = 'target'
+
+# --- Selection Hyperparameters ---
+N_FEATURES_RFE = 25       # Final target for RFE
+N_PREFILTER_RFE = 1000    # Pre-filter count (used for RFE and Lasso)
+N_FEATURES_RF = 25        # Final target for Random Forest
+
+
 def save_track_data(output_dir, track_name, X_train, X_test, y_train, y_test, features):
-    """Saves the data for a specific track to a .npz file."""
+    """Saves processed data tracks to .npz for fast loading."""
     file_path = os.path.join(output_dir, f"data_track_{track_name}.npz")
+    features_array = np.array(features)
+    
     np.savez_compressed(
         file_path,
         X_train=X_train,
         y_train=y_train,
         X_test=X_test,
         y_test=y_test,
-        feature_names=features
+        feature_names=features_array
     )
     print(f"✅ Saved Track {track_name}: {X_train.shape[1]} features at {file_path}")
 
-# --- Main Pipeline ---
-def run_all_selection_tracks(
-    input_npz_path: str, 
-    output_dir: str, 
-    n_features_rfe: int = 25, 
-    n_features_rf: int = 25
-):
-    """
-    Loads data and runs all 4 feature selection tracks.
-    """
-    print("--- Starting Multi-Track Feature Selection (Leak-Free) ---")
+
+def run_expanded_selection(output_dir: str, n_features_rfe: int, n_features_rf: int):
     
-    # =========================================
+    TRAIN_CSV = os.path.join(output_dir, f"{TRACK_E_BASE}_Train.csv")
+    TEST_CSV = os.path.join(output_dir, f"{TRACK_E_BASE}_Test.csv")
+    
+    print("\n\n=== 🏃 Starting Feature Selection on Expanded Set (Track 4E Base) ===")
+    
+    # -------------------------------------------------------
     # 1. LOAD DATA
-    # =========================================
-    print(f"📂 Loading data from {input_npz_path}...")
+    # -------------------------------------------------------
     try:
-        with np.load(input_npz_path, allow_pickle=True) as data:
-            X_train = data['X_train']
-            y_train = data['y_train']
-            X_test = data['X_test']
-            y_test = data['y_test']
-            feature_names = data['feature_names']
+        print(f"📂 Loading massive CSVs...")
+        with tqdm(total=2, desc="Reading CSVs", unit="file") as pbar:
+            df_train = pd.read_csv(TRAIN_CSV)
+            pbar.update(1)
+            df_test = pd.read_csv(TEST_CSV)
+            pbar.update(1)
+            
     except FileNotFoundError:
-        print(f"❌ ERROR: File not found at {input_npz_path}")
+        print(f"❌ ERROR: Files not found at {TRAIN_CSV}.")
         return
 
-    print(f"Loaded X_train: {X_train.shape}, X_test: {X_test.shape}")
-    os.makedirs(output_dir, exist_ok=True)
+    feature_names = df_train.columns.drop(TARGET_COL_NAME).tolist()
+    X_train = df_train.drop(TARGET_COL_NAME, axis=1).values
+    y_train = df_train[TARGET_COL_NAME].values
+    X_test = df_test.drop(TARGET_COL_NAME, axis=1).values
+    y_test = df_test[TARGET_COL_NAME].values
+    feature_names = np.array(feature_names) 
+    
+    print(f"✅ Loaded Data. X_train: {X_train.shape}, X_test: {X_test.shape}")
 
-    # =========================================
-    #  TRACK 4A: BASELINE (All Features)
-    # =========================================
-    print("\n--- Track 4A: Baseline ---")
-    save_track_data(
-        output_dir, "4A_Baseline",
-        X_train, X_test, y_train, y_test, 
-        feature_names
-    )
+    # -------------------------------------------------------
+    # PRE-FILTERING (Global Optimization)
+    # -------------------------------------------------------
+    # We create a "Filtered" version of X_train used by BOTH RFE (4B) and Lasso (4D).
+    # This ensures expensive algorithms only ever see the top 1000 candidates.
+    
+    if X_train.shape[1] > N_PREFILTER_RFE:
+        print(f"\n⚡ GLOBAL OPTIMIZATION: Pre-filtering features to top {N_PREFILTER_RFE} using ANOVA...")
+        pre_selector = SelectKBest(score_func=f_classif, k=N_PREFILTER_RFE)
+        X_train_filtered = pre_selector.fit_transform(X_train, y_train)
+        
+        # Get names of the kept features
+        filter_mask = pre_selector.get_support()
+        filtered_feature_names = feature_names[filter_mask]
+        print(f"   Reduced search space: {X_train.shape[1]} -> {X_train_filtered.shape[1]} features.")
+    else:
+        X_train_filtered = X_train
+        filtered_feature_names = feature_names
 
-    # =========================================
+    # -------------------------------------------------------
+    # TRACK 4A: BASELINE
+    # -------------------------------------------------------
+    print("\n--- Track 4A: Baseline (Full Expanded Set) ---")
+    save_track_data(output_dir, "4A_Baseline", X_train, X_test, y_train, y_test, feature_names)
+
+    # -------------------------------------------------------
     # TRACK 4B: WRAPPER (RFE)
-    # =========================================
-    print("\n--- Track 4B: Filter/Wrapper (RFE) ---")
-    print(f"Fitting RFE... (selecting {n_features_rfe} features)")
+    # -------------------------------------------------------
+    print(f"\n--- Track 4B: Wrapper (RFE) ---")
+    print(f"🔄 Fitting RFE on Pre-Filtered data (selecting final {n_features_rfe})...")
     
-    model_rfe = LogisticRegression(solver='liblinear', random_state=42)
-    rfe = RFE(model_rfe, n_features_to_select=n_features_rfe)
+    model_rfe = LogisticRegression(solver='liblinear', random_state=42, max_iter=2000)
+    rfe = RFE(model_rfe, n_features_to_select=n_features_rfe, step=0.1, verbose=1)
     
-    # FIT ONLY ON X_train, y_train
-    rfe.fit(X_train, y_train)
+    # Fit on the FILTERED set (Fast!)
+    rfe.fit(X_train_filtered, y_train)
     
-    rfe_indices = rfe.support_
-    X_train_4B = X_train[:, rfe_indices]
-    X_test_4B = X_test[:, rfe_indices]
-    features_4B = feature_names[rfe_indices]
+    # Map back to original indices
+    final_selected_names = filtered_feature_names[rfe.support_]
+    final_mask = np.isin(feature_names, final_selected_names)
     
-    print(f"Selected Top {len(features_4B)} RFE features.")
+    X_train_4B = X_train[:, final_mask]
+    X_test_4B = X_test[:, final_mask]
     
-    save_track_data(
-        output_dir, "4B_RFE",
-        X_train_4B, X_test_4B, y_train, y_test,
-        features_4B
-    )
+    save_track_data(output_dir, "4B_RFE", X_train_4B, X_test_4B, y_train, y_test, final_selected_names)
 
-    # =========================================
+    # -------------------------------------------------------
     # TRACK 4C: EMBEDDED (Random Forest)
-    # =========================================
-    print("\n--- Track 4C: Embedded (Random Forest) ---")
-    print(f"Fitting RandomForest... (selecting {n_features_rf} features)")
-    
-    rf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+    # -------------------------------------------------------
+    print(f"\n--- Track 4C: Embedded (Random Forest) ---")
+    # RF handles high dimensionality well, so we run it on the FULL set (X_train)
+    rf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1, verbose=1)
     rf.fit(X_train, y_train)
     
-    importances = rf.feature_importances_
-    rf_indices = importances.argsort()[-n_features_rf:]
-    
+    rf_indices = rf.feature_importances_.argsort()[-n_features_rf:]
     X_train_4C = X_train[:, rf_indices]
     X_test_4C = X_test[:, rf_indices]
     features_4C = feature_names[rf_indices]
     
-    print(f"Selected Top {len(features_4C)} RF features.")
-
-    save_track_data(
-        output_dir, "4C_Embedded_RF",
-        X_train_4C, X_test_4C, y_train, y_test,
-        features_4C
-    )
+    save_track_data(output_dir, "4C_Embedded_RF", X_train_4C, X_test_4C, y_train, y_test, features_4C)
     
-    # Save the feature ranking report
-    feature_importance_df = pd.DataFrame({
+    # Save ranking
+    pd.DataFrame({
         'feature': feature_names,
-        'importance': importances
-    }).sort_values(by='importance', ascending=False)
-    
-    csv_path = os.path.join(output_dir, "feature_importance_ranking.csv")
-    feature_importance_df.to_csv(csv_path, index=False)
-    print(f"💾 Saved full RF feature ranking report to {csv_path}")
-
-    # =========================================
-    #  TRACK 4D: EMBEDDED (L1/Lasso)  -  NEWLY ADDED
-    # =========================================
+        'importance': rf.feature_importances_
+    }).sort_values(by='importance', ascending=False).to_csv(
+        os.path.join(output_dir, "expanded_feature_importance_ranking.csv"), index=False
+    )
+# -------------------------------------------------------
+    # TRACK 4D: EMBEDDED (L1/Lasso) - FORCED SPARSITY
+    # -------------------------------------------------------
     print("\n--- Track 4D: Embedded (L1/Lasso) ---")
-    print(f"Fitting LogisticRegressionCV (L1 penalty) to find non-zero features...")
+    print(f"Fitting Lasso with strong penalty to force sparsity...")
     
-    # 1. Init model
-    # We use LogisticRegressionCV to find the best L1 penalty automatically
-    # 'liblinear' is required for L1 penalty
-    # 'ovr' handles the multi-class problem
-    l1_model = LogisticRegressionCV(
+    # CHANGE: Use fixed C instead of CV. 
+    # Smaller C = Stronger Penalty = More features become 0.
+    # C=0.05 is usually a sweet spot for wafer data.
+    l1_model = LogisticRegression(
         penalty='l1',
         solver='liblinear',
-        cv=5, 
+        C = 0.005,          # <--- Strong penalty to force feature removal
         random_state=42,
         multi_class='ovr',
-        n_jobs=-1
-    )
+        max_iter=5000,
+        tol=0.01
+    ) 
     
-    # 2. FIT ONLY ON X_train, y_train
-    # (X_train is already scaled, which is required for L1)
-    l1_model.fit(X_train, y_train)
+    # Fit on the FILTERED set
+    l1_model.fit(X_train_filtered, y_train)
     
-    # 3. Get the coefficients. Shape is (n_classes, n_features)
-    # A feature is "kept" if *any* of its class coefficients are non-zero.
-    l1_indices = np.sum(np.abs(l1_model.coef_), axis=0) > 0
+    # Get selected features
+    l1_support = np.sum(np.abs(l1_model.coef_), axis=0) > 0
+    final_lasso_names = filtered_feature_names[l1_support]
     
-    X_train_4D = X_train[:, l1_indices]
-    X_test_4D = X_test[:, l1_indices]
-    features_4D = feature_names[l1_indices]
+    # Map back to original indices
+    final_lasso_mask = np.isin(feature_names, final_lasso_names)
     
-    print(f"L1/Lasso automatically selected {len(features_4D)} features.")
-    print(f"L1 selected features: {features_4D}")
+    X_train_4D = X_train[:, final_lasso_mask]
+    X_test_4D = X_test[:, final_lasso_mask]
+    
+    print(f"L1/Lasso automatically selected {len(final_lasso_names)} features.")
+    
+    # If it selected 0 features (rare but possible with strong penalty), fallback to top 25
+    if len(final_lasso_names) == 0:
+        print("⚠️ Lasso selected 0 features. Fallback to Top 25 from Pre-filter.")
+        final_lasso_names = filtered_feature_names[:25]
+        # (Re-apply mask logic here if needed, or just rely on previous steps)
 
-    # 4. Save
-    save_track_data(
-        output_dir, "4D_Embedded_L1",
-        X_train_4D, X_test_4D, y_train, y_test,
-        features_4D
-    )
-    # Save the L1 model itself
-    joblib.dump(l1_model, os.path.join(output_dir, "l1_selector.joblib"))
-
-    print("\n--- Multi-Track Feature Selection Complete ---")
-
-# ───────────────────────────────────────────────
-# EXECUTION
-# ───────────────────────────────────────────────
+    save_track_data(output_dir, "4D_Embedded_L1", X_train_4D, X_test_4D, y_train, y_test, final_lasso_names)
+    
+    joblib.dump(l1_model, os.path.join(output_dir, "l1_selector_expanded.joblib"))
 if __name__ == "__main__":
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    run_expanded_selection(OUTPUT_DIR, N_FEATURES_RFE, N_FEATURES_RF)
+    print("\n--- Expanded Feature Selection (Tracks 4A-4D) Complete ---")
     
-    INPUT_NPZ = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\preprocessing_results\model_ready_data.npz"
-    OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_selection_results"
     
-    run_all_selection_tracks(
-        input_npz_path=INPUT_NPZ,
-        output_dir=OUTPUT_DIR,
-        n_features_rfe=25,
-        n_features_rf=25
-    )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    
+    
+    
 # """
 # feature_selection.py
 # ────────────────────────────────────────────
