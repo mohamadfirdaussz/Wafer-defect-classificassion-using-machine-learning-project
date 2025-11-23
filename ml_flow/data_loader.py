@@ -1,21 +1,37 @@
 # -*- coding: utf-8 -*-
 """
 data_loader.py
-────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────
 WM-811K Wafer Map Preprocessing (Cleaning + Balancing)
 
-This script performs the first stages of the pipeline:
-1. Load Dataset
-2. Cleaning (Labels and Data)
-3. Preprocessing (Denoise, Resize)
-4. Balancing (Undersampling Majority Classes)
-5. Save the processed data for the next stage.
+### 🎯 PURPOSE
+This script is the "Entry Point" for the entire Machine Learning pipeline.
+It transforms the raw, messy WM-811K dataset into a clean, standardized format.
 
-How to Run:
-- Set the `INPUT_PATH` and `OUTPUT_DIR` in the
-  `if __name__ == "__main__":` block at the bottom.
-- Run this script directly from your terminal:
-  `python data_loader.py`
+### ⚙️ KEY OPERATIONS performed in this script:
+1.  **Load Data:** Reads the massive pickle file (`LSWMD.pkl`) into memory.
+2.  **Data Cleaning:**
+    * Fixes label formatting errors (e.g., nested lists).
+    * Removes wafers that have **no labels** (we can't train on unlabeled data).
+    * Removes "Near-full" class wafers (too rare/noisy for reliable training).
+3.  **Preprocessing:**
+    * **Denoise:** Applies a `Median Filter` to remove random "salt-and-pepper" noise pixels while preserving defect edges.
+    * **Resize:** Standardizes all wafers to a fixed **64x64** grid using Nearest Neighbor interpolation (to keep values as 0, 1, 2).
+4.  **Class Balancing (Crucial):**
+    * The raw data is heavily imbalanced (thousands of 'Normal' wafers vs few 'Scratch').
+    * We perform **Random Undersampling** to cap the majority classes at 500 samples.
+    * This prevents the model from being biased towards the most frequent class.
+
+### 💻 HOW TO RUN
+1.  Open this file in VS Code.
+2.  Scroll to the bottom (`if __name__ == "__main__":`).
+3.  Update `INPUT_PATH` to point to your `LSWMD.pkl` file.
+4.  Run: `python data_loader.py`
+
+### 📦 OUTPUT
+* Saves `cleaned_balanced_wm811k.npz` to the specified output directory.
+* This file contains two arrays: `waferMap` (images) and `labels` (classes).
+────────────────────────────────────────────────────────────────────────
 """
 
 import pandas as pd
@@ -26,7 +42,7 @@ import os
 from scipy import ndimage
 from tqdm import tqdm
 
-# Register tqdm with pandas to use .progress_apply()
+# Register tqdm with pandas to use .progress_apply() for progress bars
 tqdm.pandas()
 warnings.filterwarnings("ignore")
 
@@ -37,20 +53,29 @@ warnings.filterwarnings("ignore")
 def load_dataset(pickle_path: str) -> pd.DataFrame:
     """
     Loads the main WM-811K dataset from its .pkl file.
+    
+    Args:
+        pickle_path (str): The absolute file path to 'LSWMD.pkl'.
+        
+    Returns:
+        pd.DataFrame: The loaded raw dataframe.
     """
     print(f"   Loading pickle file from: {pickle_path}")
     df = pd.read_pickle(pickle_path)
 
+    # Fix a known typo in the original dataset column name
     if "trianTestLabel" in df.columns:
         df.rename(columns={"trianTestLabel": "trainTestLabel"}, inplace=True)
 
+    # Drop 'waferIndex' as it is just an ID and not a predictive feature
     df.drop(["waferIndex"], axis=1, inplace=True, errors="ignore")
     return df
 
 
 def add_wafer_dimensions(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculates the (height, width) of each wafer map and stores it.
+    Calculates the (height, width) of each wafer map and stores it in a new column.
+    This helps us identify and filter out tiny, unusable wafers later.
     """
     df["waferMapDim"] = df["waferMap"].apply(lambda x: (x.shape[0], x.shape[1]))
     return df
@@ -62,42 +87,57 @@ def add_wafer_dimensions(df: pd.DataFrame) -> pd.DataFrame:
 
 def clean_labels(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Filters the full dataset down to only the wafers that have a defect label.
+    Filters the dataset to keep only valid, labeled wafers.
+    
+    Why this is needed:
+    The raw dataset contains nested lists like [['Center']] instead of just 'Center'.
+    It also has thousands of wafers with no label at all. This function fixes both.
     """
     df = df.copy()
+    
     # Un-nest the labels (e.g. [['Center']] -> 'Center')
     df["failureType"] = df["failureType"].apply(lambda x: x[0][0] if len(x) > 0 else np.nan)
     df["trainTestLabel"] = df["trainTestLabel"].apply(lambda x: x[0][0] if len(x) > 0 else np.nan)
     
-    # Drop any wafer that doesn't have a label (NaN)
+    # CRITICAL: Drop any wafer that doesn't have a label. We can't use them for training.
     df.dropna(subset=["failureType"], inplace=True)
     
+    # Convert to categorical type for memory efficiency
     df["failureType"] = df["failureType"].astype("category")
     df["trainTestLabel"] = df["trainTestLabel"].astype("category")
     return df
 
 def filter_wafers(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Removes noisy data (tiny wafers and rare classes).
+    Removes noisy data to improve model quality.
+    
+    Filters applied:
+    1. Removes wafers smaller than 5x5 pixels (too small to contain patterns).
+    2. Removes 'Near-full' class (often mislabeled or too similar to other defects).
     """
     # Remove wafers with dimensions 5x5 or smaller
     df = df[df["waferMapDim"].apply(lambda x: all(np.greater(x, (5, 5))))]
     
-    # Remove 'Near-full' class (often too rare and noisy)
+    # Remove 'Near-full' class
     df = df[df["failureType"] != "Near-full"]
     
-    # Update categories after dropping
+    # Clean up unused categories after dropping
     df["failureType"] = df["failureType"].cat.remove_unused_categories()
     return df
 
 
 # ───────────────────────────────────────────────
-# 3️⃣ PREPROCESSING
+# 3️⃣ PREPROCESSING (Denoise & Resize)
 # ───────────────────────────────────────────────
 
 def apply_denoise(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Applies a median filter to remove 'salt-and-pepper' noise.
+    Applies a Median Filter to every wafer map.
+    
+    Why Median Filter?
+    Wafer maps often have single random pixels that are "lit up" due to sensor noise.
+    A 2x2 median filter smooths these out without blurring the sharp edges of real defects 
+    (like 'Scratch' or 'Edge-Ring'), which averaging filters would destroy.
     """
     df = df.copy()
     print("   Applying denoise (median filter)...")
@@ -107,7 +147,8 @@ def apply_denoise(df: pd.DataFrame) -> pd.DataFrame:
 
 def encode_labels(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Converts the string labels (e.g., "Center") into numbers (e.g., 0).
+    Converts string labels (e.g., "Center") into integers (e.g., 0).
+    Machine learning models require numeric targets.
     """
     mapping_type = {
         "Center": 0, "Donut": 1, "Edge-Loc": 2, "Edge-Ring": 3,
@@ -119,7 +160,11 @@ def encode_labels(df: pd.DataFrame) -> pd.DataFrame:
 
 def resize_wafer_map(w, target_size=(64, 64)):
     """
-    Resizes a single wafer map to a target (e.g., 64x64) size using Nearest Neighbor.
+    Resizes a single wafer map to exactly 64x64 pixels.
+    
+    Method: Nearest Neighbor (order=0).
+    Why? We must preserve the discrete values (0=background, 1=wafer, 2=defect).
+    Standard linear resizing would create floats like 1.5, which breaks our logic.
     """
     return ndimage.zoom(
         w, 
@@ -144,20 +189,29 @@ def apply_resize(df: pd.DataFrame, size=(64, 64)) -> pd.DataFrame:
 
 def balance_classes(df: pd.DataFrame, samples_per_class=500, seed=10) -> pd.DataFrame:
     """
-    Solves the class imbalance problem by undersampling majority classes to 500.
+    Solves the massive class imbalance problem via Undersampling.
+    
+    The Problem:
+    - 'none' class has ~140,000 samples.
+    - 'Scratch' class has ~1,000 samples.
+    If we don't fix this, the model will just predict 'none' 99% of the time.
+    
+    The Solution:
+    - We randomly select only 500 samples from the big classes.
+    - This forces the model to pay equal attention to the defect types.
     """
     
     def sample_group(group):
         if len(group) >= samples_per_class:
             return group.sample(samples_per_class, random_state=seed)
-        return group # Return the whole group if it's smaller
+        return group # Return the whole group if it's smaller than the limit
 
     print(f"   Balancing classes: Undersampling majority classes to {samples_per_class}...")
-    # Using include_groups=False to avoid future pandas warnings if needed, 
-    # but standard apply usually works fine here.
+    
+    # Group by defect type and apply the sampling limit
     df_balanced = df.groupby('failureType', group_keys=False).apply(sample_group).reset_index(drop=True)
     
-    # Shuffle the final dataframe
+    # Shuffle the final dataframe so classes aren't ordered
     df_balanced = df_balanced.sample(frac=1, random_state=seed).reset_index(drop=True)
     
     print(f"✅ Balanced dataset created: {len(df_balanced)} samples total.")
@@ -172,27 +226,31 @@ def balance_classes(df: pd.DataFrame, samples_per_class=500, seed=10) -> pd.Data
 
 def save_cleaned_data(df, save_path):
     """
-    Saves the final, processed wafer maps and labels to a single .npz file.
+    Saves the processed data to a compressed .npz file.
+    
+    Why .npz?
+    It stores numpy arrays much more efficiently than CSV or Pickle.
+    This makes loading data in the next stage (Feature Engineering) incredibly fast.
     """
     # Ensure directory exists
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     
-    # Use np.stack to create a single 3D array (N, H, W)
+    # Convert dataframe column to a single 3D numpy array (N, Height, Width)
     wafer_maps_array = np.stack(df["waferMap"].values)
     labels_array = df["failureNum"].to_numpy()
 
-    # Use .savez_compressed for significant disk space savings
+    # Save compressed
     np.savez_compressed(
         save_path,
-        waferMap=wafer_maps_array,  # This is now a (N, H, W) array
-        labels=labels_array         # This is now a (N,) array
+        waferMap=wafer_maps_array,  
+        labels=labels_array         
     )
     print(f"💾 Cleaned wafer maps saved to {save_path}")
     print(f"   Saved array shapes: waferMap={wafer_maps_array.shape}, labels={labels_array.shape}")
 
 
 # ───────────────────────────────────────────────
-# 6️⃣ MAIN PIPELINE
+# 6️⃣ MAIN PIPELINE CONTROLLER
 # ───────────────────────────────────────────────
 
 def load_and_preprocess(
@@ -205,6 +263,7 @@ def load_and_preprocess(
 ):
     """
     Runs the FULL cleaning + balancing pipeline from start to finish.
+    This is the function called by the main execution block.
     """
     # Set global seed for reproducibility
     random.seed(seed)
@@ -237,16 +296,20 @@ def load_and_preprocess(
 
 
 # ───────────────────────────────────────────────
-# 7️⃣ EXECUTION
+# 7️⃣ EXECUTION ENTRY POINT
 # ───────────────────────────────────────────────
 
 if __name__ == "__main__":
     """
-    Entry point. Define paths here.
+    This block only runs if you execute this script directly.
+    It defines the specific file paths and starts the process.
     """
     
-    # --- Define your paths clearly ---
+    # --- CONFIGURATION ---
+    # Update this path to where your raw LSWMD.pkl file is located
     INPUT_PATH = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\datasets\LSWMD.pkl"
+    
+    # Update this to where you want the cleaned file to be saved
     OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results"
     OUTPUT_FILE_PATH = os.path.join(OUTPUT_DIR, "cleaned_balanced_wm811k.npz")
 
@@ -256,8 +319,8 @@ if __name__ == "__main__":
         save_path=OUTPUT_FILE_PATH,
         save=True,
         target_size=(64, 64),
-        samples_per_class=500, # Max samples for majority classes
-        seed=42                # Use a common seed
+        samples_per_class=500, # Cap majority classes at 500
+        seed=42                # Ensure reproducible results
     )
     
     print("\n🎯 Dataset cleaned and ready for FEATURE EXTRACTION stage.")

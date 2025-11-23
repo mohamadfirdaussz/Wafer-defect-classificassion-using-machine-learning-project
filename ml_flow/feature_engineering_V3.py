@@ -1,25 +1,39 @@
 # -*- coding: utf-8 -*-
 """
-feature_engineering_v3.py
-────────────────────────────────────────────
-Optimized, robust, and configurable feature extraction for WM-811K wafer maps.
+feature_engineering.py (Stage 2: Feature Extraction)
+────────────────────────────────────────────────────────────────────────
+WM-811K Wafer Defect Classification Pipeline
 
-Key improvements vs. original:
-- Faster Radon transform configuration (control theta resolution and output points).
-- Robust largest-region selection using bincount + regionprops (no stats.mode).
-- Input validation and NaN/Inf handling.
-- Optional caching of intermediate results (simple file-based resume via NPZ).
-- Save features as both NPZ (binary) and CSV (human-readable).
-- Configurable parallelism via joblib; safer tqdm integration.
-- Clear logging and parameter-driven behavior.
+### 🎯 PURPOSE
+This script is the "Feature Extractor." It takes the raw 64x64 wafer images 
+and transforms them into a meaningful set of 65 numerical features.
 
-Usage:
-- Edit PATHS and CONFIG below or call `extract_and_save(...)` programmatically.
-- Run: `python feature_engineering_v3.py`
+Raw images are just grids of pixels (0, 1, 2). Machine learning models struggle 
+to learn complex patterns (like a scratch or a ring) from raw pixels alone. 
+We need to calculate "descriptors" that summarize the shape and distribution of defects.
 
-Notes:
-- This module remains leak-free: it operates only on wafer images and returns features
-  independent of train/test labels.
+### ⚙️ FEATURES EXTRACTED (65 Total)
+We extract 4 types of features to capture different aspects of the defect:
+
+1.  **Density Features (13):** * **What:** We divide the wafer into 13 regions (Center, Inner Ring, Outer Ring, etc.).
+    * **Why:** Helps distinguish defects based on location. 
+        (e.g., 'Center' defects have high density in region 9; 'Edge-Ring' in regions 1-4).
+
+2.  **Radon Features (40):** * **What:** The Radon transform projects the image at different angles (0° to 180°).
+    * **Why:** It is mathematically excellent at detecting **lines**. 
+        (e.g., A 'Scratch' defect creates a very strong peak in the Radon transform 
+        at a specific angle, whereas a 'Donut' creates a flat profile).
+
+3.  **Geometry Features (6):** * **What:** Properties of the largest defect cluster (Area, Perimeter, Eccentricity, Solidity).
+    * **Why:** Describes the shape. 
+        (e.g., 'Loc' is blobby (high solidity), 'Scratch' is thin (high eccentricity)).
+
+4.  **Statistical Features (6):** * **What:** Mean, Variance, Skewness, Kurtosis of the pixel values.
+    * **Why:** Captures the overall "noise" level and distribution of the wafer.
+
+### 💻 OUTPUT
+Saves `features_dataset.csv` to `preprocessing_results/`.
+────────────────────────────────────────────────────────────────────────
 """
 
 import os
@@ -28,217 +42,149 @@ from typing import Tuple, Optional, Sequence
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed, cpu_count
+from joblib import Parallel, delayed
 from scipy import ndimage, interpolate
 from scipy.stats import skew, kurtosis
 from skimage.transform import radon
 from skimage import measure
 from tqdm import tqdm
 
-# ----------------------------
-# Configuration
-# ----------------------------
+# ───────────────────────────────────────────────
+# 📝 CONFIGURATION
+# ───────────────────────────────────────────────
 
-# Default behavior parameters (tune for speed vs. fidelity)
-N_RADON_THETA = 72            # number of angles for Radon (<=180). Lower = faster
-RADON_OUTPUT_POINTS = 20      # interpolated output length for radon features
-USE_PARALLEL = True
-N_JOBS = -1                   # -1 => use all cores
-SAVE_CSV = True
-SAVE_NPZ = True
-FORCE_REEXTRACT = False       # If False and output NPZ exists, feature extraction will be skipped
+# Paths (Updated to match Main Pipeline)
+INPUT_NPZ = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\cleaned_balanced_wm811k.npz"
+OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\preprocessing_results"
 
-# Logging
+# Feature Parameters
+N_RADON_THETA = 72            # Number of angles for Radon transform
+RADON_OUTPUT_POINTS = 20      # Points per profile (Mean + Std = 40 features)
+USE_PARALLEL = True           # Use multi-core processing
+N_JOBS = -1                   # Use all available cores
+
+# Logging Setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-# ----------------------------
-# Helper / Validation
-# ----------------------------
+# ───────────────────────────────────────────────
+# 1️⃣ HELPER FUNCTIONS
+# ───────────────────────────────────────────────
 
 def _validate_image(img: np.ndarray) -> np.ndarray:
-    """Ensure image is a finite 2D ndarray with integer-like values.
-    Replaces NaN/inf with 0 and casts to integer dtype.
-    """
-    if not isinstance(img, np.ndarray):
-        raise TypeError("wafer map must be a numpy.ndarray")
+    """Ensures image is valid 2D array, replacing NaNs with 0."""
     if img.ndim != 2:
-        raise ValueError("wafer map must be 2D")
-    # Replace NaN/Inf
+        raise ValueError("Wafer map must be 2D")
     if not np.isfinite(img).all():
-        img = np.nan_to_num(img, nan=0.0, posinf=0.0, neginf=0.0)
-    # Cast to integer-like
-    if not np.issubdtype(img.dtype, np.integer):
-        # round then cast
-        img = np.rint(img).astype(np.int32)
-    return img
-
-# ----------------------------
-# Feature functions
-# ----------------------------
+        img = np.nan_to_num(img, nan=0.0)
+    return img.astype(np.int32)
 
 def cal_den(region: np.ndarray) -> float:
-    """Return percentage of pixels equal to 2 in a region.
-    Guaranteed to return a float between 0 and 100.
     """
-    if region.size == 0:
-        return 0.0
-    # use boolean mask and float division
+    Calculates defect density.
+    Returns the percentage of pixels in a region that are defects (value == 2).
+    """
+    if region.size == 0: return 0.0
     return 100.0 * (np.count_nonzero(region == 2) / region.size)
 
-
 def find_regions(img: np.ndarray) -> Sequence[float]:
-    """Divide wafer into 13 regions and return density for each.
-
-    Regions: outer ring (4) + inner 3x3 grid (9) => 13
-    This implementation aims to produce more consistent bins for arbitrary sizes.
+    """
+    Divides the wafer into 13 spatial zones to capture defect location.
+    
+    Zones roughly correspond to:
+    - 4 Edge regions (Top, Bottom, Left, Right)
+    - 9 Inner grid regions (3x3 grid in the center)
     """
     rows, cols = img.shape
-    if rows < 5 or cols < 5:
-        return [0.0] * 13
+    if rows < 5 or cols < 5: return [0.0] * 13
 
-    # create 6 boundaries for rows and cols such that central region is approx middle 3 blocks
-    r_edges = np.linspace(0, rows, 6, dtype=int)
-    c_edges = np.linspace(0, cols, 6, dtype=int)
-
-    # ensure monotonic increasing
-    r_edges = np.unique(r_edges)
-    c_edges = np.unique(c_edges)
-    # pad if necessary
-    if r_edges.size < 6:
-        r_edges = np.concatenate([r_edges, np.full(6 - r_edges.size, rows)])
-    if c_edges.size < 6:
-        c_edges = np.concatenate([c_edges, np.full(6 - c_edges.size, cols)])
-
-    r_edges = r_edges[:6]
-    c_edges = c_edges[:6]
-
-    # define regions by slicing indices (match original layout)
-    regions = []
-    regions.append(img[r_edges[0]:r_edges[1], :])            # reg1
-    regions.append(img[:, c_edges[4]:c_edges[5]])            # reg2
-    regions.append(img[r_edges[4]:r_edges[5], :])            # reg3
-    regions.append(img[:, c_edges[0]:c_edges[1]])            # reg4
-    regions.append(img[r_edges[1]:r_edges[2], c_edges[1]:c_edges[2]])
-    regions.append(img[r_edges[1]:r_edges[2], c_edges[2]:c_edges[3]])
-    regions.append(img[r_edges[1]:r_edges[2], c_edges[3]:c_edges[4]])
-    regions.append(img[r_edges[2]:r_edges[3], c_edges[1]:c_edges[2]])
-    regions.append(img[r_edges[2]:r_edges[3], c_edges[2]:c_edges[3]])
-    regions.append(img[r_edges[2]:r_edges[3], c_edges[3]:c_edges[4]])
-    regions.append(img[r_edges[3]:r_edges[4], c_edges[1]:c_edges[2]])
-    regions.append(img[r_edges[3]:r_edges[4], c_edges[2]:c_edges[3]])
-    regions.append(img[r_edges[3]:r_edges[4], c_edges[3]:c_edges[4]])
-
+    # Create boundaries for 13 regions
+    r_edges = np.unique(np.linspace(0, rows, 6, dtype=int))
+    c_edges = np.unique(np.linspace(0, cols, 6, dtype=int))
+    
+    # Slice image into regions using standard numpy indexing
+    regions = [
+        img[r_edges[0]:r_edges[1], :],                  # Top Edge
+        img[:, c_edges[4]:c_edges[5]],                  # Right Edge
+        img[r_edges[4]:r_edges[5], :],                  # Bottom Edge
+        img[:, c_edges[0]:c_edges[1]],                  # Left Edge
+        img[r_edges[1]:r_edges[2], c_edges[1]:c_edges[2]], # Inner Grid 1 (Top-Left)
+        img[r_edges[1]:r_edges[2], c_edges[2]:c_edges[3]], # Inner Grid 2 (Top-Center)
+        img[r_edges[1]:r_edges[2], c_edges[3]:c_edges[4]], # Inner Grid 3 (Top-Right)
+        img[r_edges[2]:r_edges[3], c_edges[1]:c_edges[2]], # Inner Grid 4 (Mid-Left)
+        img[r_edges[2]:r_edges[3], c_edges[2]:c_edges[3]], # Inner Grid 5 (DEAD CENTER)
+        img[r_edges[2]:r_edges[3], c_edges[3]:c_edges[4]], # Inner Grid 6 (Mid-Right)
+        img[r_edges[3]:r_edges[4], c_edges[1]:c_edges[2]], # Inner Grid 7 (Bot-Left)
+        img[r_edges[3]:r_edges[4], c_edges[2]:c_edges[3]], # Inner Grid 8 (Bot-Center)
+        img[r_edges[3]:r_edges[4], c_edges[3]:c_edges[4]]  # Inner Grid 9 (Bot-Right)
+    ]
     return [cal_den(r) for r in regions]
 
-
-def change_val(img: np.ndarray) -> np.ndarray:
-    """Change '1' pixels to 0 (background) and keep defects (2) intact.
-    Returns a copy.
-    """
-    img = img.copy()
-    img[img == 1] = 0
-    return img
-
-
 def _safe_radon(img: np.ndarray, n_theta: int) -> np.ndarray:
-    """Compute Radon transform with safe handling for small images.
-    Returns the sinogram (2D array).
     """
-    # radon requires float image
+    Computes the Radon transform (Sinogram).
+    Projects the image sum along 'n_theta' different angles.
+    Crucial for detecting linear features like scratches.
+    """
     imgf = img.astype(float)
-    # theta angles evenly spaced in [0, 180)
     theta = np.linspace(0., 180., n_theta, endpoint=False)
     try:
-        sinogram = radon(imgf, theta=theta, circle=False)
+        return radon(imgf, theta=theta, circle=False)
     except Exception:
-        # fallback: try with fewer angles
-        theta = np.linspace(0., 180., max(8, n_theta // 2), endpoint=False)
-        sinogram = radon(imgf, theta=theta, circle=False)
-    return sinogram
+        return np.zeros((img.shape[0], n_theta))
 
-
-def cubic_inter_features_from_sinogram(sinogram: np.ndarray, output_points: int) -> np.ndarray:
-    """Return two arrays (mean, std) interpolated to `output_points` each and concatenated.
-    Handles degenerate cases safely.
+def cubic_inter_features(sinogram: np.ndarray, output_points: int) -> np.ndarray:
     """
-    if sinogram.size == 0:
-        return np.zeros(output_points * 2, dtype=float)
+    Compresses the Radon Sinogram into usable features.
+    Instead of using the whole 2D sinogram, we take the Mean and Std Dev
+    profiles and interpolate them to a fixed size (e.g., 20 points).
+    """
+    if sinogram.size == 0: return np.zeros(output_points * 2)
 
     mean_profile = np.mean(sinogram, axis=1)
     std_profile = np.std(sinogram, axis=1)
-
-    # interpolation x
-    x = np.arange(1, mean_profile.size + 1)
-    xnew = np.linspace(1, mean_profile.size, output_points)
-
-    try:
-        f_mean = interpolate.interp1d(x, mean_profile, kind='cubic', bounds_error=False, fill_value=x.mean())
-        f_std = interpolate.interp1d(x, std_profile, kind='cubic', bounds_error=False, fill_value=x.mean())
-        mean_interp = f_mean(xnew)
-        std_interp = f_std(xnew)
-    except Exception:
-        # fallback to linear
-        f_mean = interpolate.interp1d(x, mean_profile, kind='linear', bounds_error=False, fill_value='extrapolate')
-        f_std = interpolate.interp1d(x, std_profile, kind='linear', bounds_error=False, fill_value='extrapolate')
-        mean_interp = f_mean(xnew)
-        std_interp = f_std(xnew)
-
-    # normalise roughly by area to keep scale reasonable
-    mean_interp = mean_interp / 100.0
-    std_interp = std_interp / 100.0
-
-    return np.concatenate([mean_interp, std_interp])
-
+    
+    # Interpolate to fixed size
+    x = np.arange(len(mean_profile))
+    xnew = np.linspace(0, len(mean_profile)-1, output_points)
+    
+    f_mean = interpolate.interp1d(x, mean_profile, kind='linear')
+    f_std = interpolate.interp1d(x, std_profile, kind='linear')
+    
+    return np.concatenate([f_mean(xnew), f_std(xnew)])
 
 def fea_geom(img: np.ndarray) -> Sequence[float]:
-    """Extract geometric features for the largest connected defect region.
-    Returns: area, perimeter, major_axis, minor_axis, eccentricity, solidity
-    All values are normalized to image dimensions where appropriate.
     """
-    h, w = img.shape
-    norm_area = float(h * w)
-    norm_perimeter = float(np.sqrt(h ** 2 + w ** 2))
-
-    # label connected regions (defects==2)
+    Extracts geometric properties of the largest defect cluster using `regionprops`.
+    - Area: Size of defect
+    - Perimeter: Length of boundary
+    - Major/Minor Axis: Length/Width of the blob
+    - Eccentricity: How elongated it is (0=circle, 1=line)
+    - Solidity: How convex/solid the shape is
+    """
+    # Label connected regions (defect == 2)
     labels = measure.label(img == 2, connectivity=1)
-    if labels.max() == 0:
-        return [0.0] * 6
+    if labels.max() == 0: return [0.0] * 6
 
-    # find largest label by pixel count using bincount
-    counts = np.bincount(labels.flatten())
-    # counts[0] is background; find argmax among labels>0
-    if counts.size <= 1:
-        return [0.0] * 6
-    largest_label = int(np.argmax(counts[1:]) + 1)
-
+    # Find largest region by area
     props = measure.regionprops(labels)
-    # regionprops returns regions in label order (1..n)
-    try:
-        region = props[largest_label - 1]
-    except Exception:
-        # fallback: pick region with largest area
-        region = max(props, key=lambda r: r.area)
+    region = max(props, key=lambda r: r.area)
+    
+    return [
+        region.area,
+        region.perimeter,
+        region.major_axis_length,
+        region.minor_axis_length,
+        region.eccentricity,
+        region.solidity
+    ]
 
-    prop_area = region.area / norm_area
-    prop_perimeter = (region.perimeter if region.perimeter is not None else 0.0) / (norm_perimeter if norm_perimeter != 0 else 1.0)
-    prop_majaxis = (region.major_axis_length if region.major_axis_length is not None else 0.0) / (norm_perimeter if norm_perimeter != 0 else 1.0)
-    prop_minaxis = (region.minor_axis_length if region.minor_axis_length is not None else 0.0) / (norm_perimeter if norm_perimeter != 0 else 1.0)
-    prop_ecc = float(region.eccentricity if region.eccentricity is not None else 0.0)
-    prop_solidity = float(region.solidity if region.solidity is not None else 0.0)
-
-    return [prop_area, prop_perimeter, prop_majaxis, prop_minaxis, prop_ecc, prop_solidity]
-
-
-def fea_statistical_features(img: np.ndarray) -> Sequence[float]:
-    """Return simple statistical descriptors of the wafer image (flattened).
-    mean, std, var, skew, kurtosis, median
+def fea_stats(img: np.ndarray) -> Sequence[float]:
     """
-    pixels = img.flatten().astype(float)
-    pixels = pixels[np.isfinite(pixels)]
-    if pixels.size == 0:
-        return [0.0] * 6
-
+    Extracts basic statistics of the pixel values.
+    Useful for identifying overall noise levels or defect intensity.
+    """
+    pixels = img.flatten()
     return [
         float(np.mean(pixels)),
         float(np.std(pixels)),
@@ -248,156 +194,81 @@ def fea_statistical_features(img: np.ndarray) -> Sequence[float]:
         float(np.median(pixels))
     ]
 
-# ----------------------------
-# Single-wafer pipeline
-# ----------------------------
+# ───────────────────────────────────────────────
+# 2️⃣ MAIN EXTRACTION PIPELINE
+# ───────────────────────────────────────────────
 
-def process_single_wafer(img: np.ndarray, radon_theta: int = N_RADON_THETA, radon_points: int = RADON_OUTPUT_POINTS) -> np.ndarray:
-    """Run the full feature extraction for one wafer and return a 1D feature vector.
-    Order:
-      1) validate
-      2) change_val
-      3) density (13)
-      4) radon (mean+std -> 40)
-      5) geometry (6)
-      6) statistics (6)
-    Total features default: 65
+def process_single_wafer(img: np.ndarray) -> np.ndarray:
+    """
+    Master function to process one wafer map.
+    Calls all feature sub-functions and concatenates the results into a 1D array.
     """
     img = _validate_image(img)
-    img2 = change_val(img)
+    
+    # 1. Density Features (13)
+    dens = find_regions(img)
+    
+    # 2. Radon Features (40)
+    # Change background '1' to '0' for cleaner transform
+    img_clean = img.copy()
+    img_clean[img_clean == 1] = 0
+    
+    sinogram = _safe_radon(img_clean, n_theta=N_RADON_THETA)
+    radon_feats = cubic_inter_features(sinogram, output_points=RADON_OUTPUT_POINTS)
+    
+    # 3. Geometry Features (6)
+    geom = fea_geom(img)
+    
+    # 4. Statistical Features (6)
+    stats = fea_stats(img)
+    
+    return np.concatenate([dens, radon_feats, geom, stats])
 
-    dens = find_regions(img2)
-
-    # Radon: compute sinogram and interpolate
-    sinogram = _safe_radon(img2, n_theta=radon_theta)
-    radon_feats = cubic_inter_features_from_sinogram(sinogram, output_points=radon_points)
-
-    geom = fea_geom(img2)
-    stats_feats = fea_statistical_features(img2)
-
-    feat = np.concatenate([np.array(dens, dtype=float), radon_feats.astype(float), np.array(geom, dtype=float), np.array(stats_feats, dtype=float)])
-    return feat
-
-# ----------------------------
-# Parallel extraction orchestration
-# ----------------------------
-
-def extract_features_parallel(X: np.ndarray, y: Optional[np.ndarray] = None, n_jobs: int = N_JOBS, radon_theta: int = N_RADON_THETA, radon_points: int = RADON_OUTPUT_POINTS, use_parallel: bool = USE_PARALLEL) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-    """Extract features for all wafers. Returns X_features (N_samples, N_features) and same labels if provided.
-    Uses joblib.Parallel for speed. Integrates tqdm progress bar.
+def extract_and_save():
     """
-    n_samples = len(X)
-    logger.info(f"Starting extraction for {n_samples} wafers (radon_theta={radon_theta}, radon_points={radon_points})")
+    Orchestrator function:
+    1. Loads the cleaned .npz file.
+    2. Runs feature extraction in parallel (using all CPU cores).
+    3. Saves the result as a CSV file for the next stage.
+    """
+    if not os.path.exists(INPUT_NPZ):
+        logger.error(f"Input file not found: {INPUT_NPZ}")
+        return
 
-    # create iterable of indices to enable tqdm
-    indices = list(range(n_samples))
-
-    if use_parallel and (n_jobs != 1):
-        # joblib backend with delayed + manual tqdm wrapping
-        results = Parallel(n_jobs=n_jobs, prefer='threads')(
-            delayed(process_single_wafer)(X[i], radon_theta, radon_points) for i in indices
-        )
-        X_features = np.vstack(results)
-    else:
-        # serial with tqdm
-        feats = []
-        for i in tqdm(indices, desc="Extracting features", unit="wafer"):
-            feats.append(process_single_wafer(X[i], radon_theta, radon_points))
-        X_features = np.vstack(feats)
-
-    if y is not None:
-        return X_features, y
-    return X_features, None
-
-# ----------------------------
-# Save helpers
-# ----------------------------
-
-def save_features(X_features: np.ndarray, y: Optional[np.ndarray], out_dir: str, base_name: str = "features_dataset") -> None:
-    os.makedirs(out_dir, exist_ok=True)
-    # construct column names
+    logger.info(f"Loading data from {INPUT_NPZ}...")
+    data = np.load(INPUT_NPZ, allow_pickle=True)
+    X_imgs = data['waferMap']
+    y_labels = data['labels']
+    
+    logger.info(f"Extracting features for {len(X_imgs)} wafers (Jobs: {N_JOBS})...")
+    
+    # Parallel Processing with Progress Bar
+    X_features = Parallel(n_jobs=N_JOBS)(
+        delayed(process_single_wafer)(img) for img in tqdm(X_imgs, unit="wafer")
+    )
+    X_features = np.array(X_features)
+    
+    # Define Column Names for clarity in CSV
     feature_names = (
         [f"density_{i+1}" for i in range(13)] +
         [f"radon_mean_{i+1}" for i in range(RADON_OUTPUT_POINTS)] +
         [f"radon_std_{i+1}" for i in range(RADON_OUTPUT_POINTS)] +
-        ["geom_area", "geom_perimeter", "geom_major_axis", "geom_minor_axis", "geom_eccentricity", "geom_solidity"] +
+        ["geom_area", "geom_perimeter", "geom_major_axis", "geom_minor_axis", 
+         "geom_eccentricity", "geom_solidity"] +
         ["stat_mean", "stat_std", "stat_var", "stat_skew", "stat_kurt", "stat_median"]
     )
-
-    if len(feature_names) != X_features.shape[1]:
-        logger.warning("Feature name count does not match feature columns. Regenerating names dynamically.")
-        feature_names = [f"f{i}" for i in range(X_features.shape[1])]
-
-    if SAVE_NPZ:
-        npz_path = os.path.join(out_dir, f"{base_name}.npz")
-        if os.path.exists(npz_path) and not FORCE_REEXTRACT:
-            logger.info(f"NPZ already exists: {npz_path} (overwrite disabled by FORCE_REEXTRACT) )")
-        else:
-            if y is None:
-                np.savez_compressed(npz_path, features=X_features)
-            else:
-                np.savez_compressed(npz_path, features=X_features, labels=y)
-            logger.info(f"Saved NPZ: {npz_path}")
-
-    if SAVE_CSV:
-        csv_path = os.path.join(out_dir, f"{base_name}.csv")
-        df = pd.DataFrame(X_features, columns=feature_names)
-        if y is not None:
-            df["label"] = y
-        df.to_csv(csv_path, index=False)
-        logger.info(f"Saved CSV: {csv_path}")
-
-# ----------------------------
-# High-level runner
-# ----------------------------
-
-def extract_and_save(npz_input_path: str, out_dir: str, force: bool = False) -> Tuple[np.ndarray, np.ndarray]:
-    """Main high-level function to load NPZ produced by data_loader and run extraction.
-    Returns X_features, y_labels.
-    """
-    global FORCE_REEXTRACT
-    FORCE_REEXTRACT = force
-
-    if not os.path.exists(npz_input_path):
-        raise FileNotFoundError(f"Input NPZ not found: {npz_input_path}")
-
-    data = np.load(npz_input_path, allow_pickle=True)
-    X = data.get("waferMap")
-    y = data.get("labels")
-
-    if X is None:
-        raise KeyError("Input NPZ does not contain 'waferMap' key")
-
-    # short-circuit if features were already saved and not forcing
-    out_npz = os.path.join(out_dir, "features_dataset.npz")
-    if os.path.exists(out_npz) and not force:
-        logger.info(f"Found existing features NPZ at {out_npz}. Loading and returning (force={force}).")
-        loaded = np.load(out_npz, allow_pickle=True)
-        return loaded["features"], loaded.get("labels")
-
-    X_features, y_labels = extract_features_parallel(X, y, n_jobs=N_JOBS, radon_theta=N_RADON_THETA, radon_points=RADON_OUTPUT_POINTS, use_parallel=USE_PARALLEL)
-
-    save_features(X_features, y_labels, out_dir)
-
-    return X_features, y_labels
-
-# ----------------------------
-# CLI entry
-# ----------------------------
+    
+    # Create DataFrame
+    df = pd.DataFrame(X_features, columns=feature_names)
+    df['target'] = y_labels # Append target column
+    
+    # Save
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    csv_path = os.path.join(OUTPUT_DIR, "features_dataset.csv")
+    df.to_csv(csv_path, index=False)
+    
+    logger.info(f"✅ Success! Features saved to: {csv_path}")
+    logger.info(f"   Shape: {df.shape} (Rows, Columns)")
 
 if __name__ == "__main__":
-    # User-editable paths
-    INPUT_NPZ = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\cleaned_balanced_wm811k.npz"
-    OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_engineering_results_v3"
-
-    # Example: tweak performance parameters here if needed
-    N_RADON_THETA = 48
-    RADON_OUTPUT_POINTS = 20
-    USE_PARALLEL = True
-    N_JOBS = -1
-    SAVE_NPZ = True
-    SAVE_CSV = True
-
-    logger.info("Starting optimized feature extraction v3...")
-    feats, labels = extract_and_save(INPUT_NPZ, OUTPUT_DIR, force=False)
-    logger.info(f"Completed: saved {feats.shape[0]} samples x {feats.shape[1]} features")
+    extract_and_save()
