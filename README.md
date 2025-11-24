@@ -23,13 +23,39 @@ We engineered a **5-Stage "Leak-Proof" Pipeline** that features:
 
 ---
 
+## 🧠 Machine Learning Concepts Explained
+
+This pipeline utilizes specific advanced techniques to maximize performance:
+
+### 1. Radon Transform (Feature Engineering)
+Unlike standard density metrics, the **Radon Transform** projects the 2D wafer image along specific angles (0° to 180°), similar to a CT scan.
+* **Why we used it:** It is mathematically specialized for detecting **linear structures**. A "Scratch" defect creates a distinct high-intensity peak in the Radon sinogram that simple pixel counts often miss.
+
+### 2. SMOTE (Handling Imbalance)
+**Synthetic Minority Over-sampling Technique (SMOTE)** generates new, synthetic training samples for rare defect classes (like 'Loc' or 'Donut').
+* **Why we used it:** Instead of simply duplicating existing images (which causes overfitting), SMOTE interpolates between existing samples to create plausible *new* variations of defects, helping the model generalize better.
+
+### 3. Feature Expansion (Interaction Terms)
+We mathematically combined base features to create **Interaction Terms** (e.g., $Density_{Center} \times Radon_{Peak}$).
+* **Why we used it:** Some defects are defined by relationships. A 'Donut' defect isn't just defined by density, but by the *ratio* of center density to edge density. Expansion exposes these non-linear relationships to the model.
+
+### 4. Lasso (L1) Regularization
+We used **L1 Regularization** as an embedded feature selection method. It adds a penalty equal to the absolute value of the magnitude of coefficients.
+* **Why we used it:** This penalty forces the coefficients of weak or redundant features to become **exactly zero**. It successfully filtered our 8,400 expanded features down to the ~375 most predictive ones without human intervention.
+
+### 5. Gradient Boosting (The Winning Algorithm)
+**Gradient Boosting** builds an ensemble of decision trees sequentially. Each new tree is trained specifically to correct the errors made by the previous trees.
+* **Why it won:** Unlike Random Forest (which builds trees independently), Gradient Boosting focuses its learning power on the "hard-to-classify" edge cases, making it superior for distinguishing morphologically similar defects.
+
+---
+
 ## 🏆 Achievement of Study Objectives
 
 This project successfully met its core research goals:
 
 | Objective | Method Implementation | Outcome / Conclusion |
 | :--- | :--- | :--- |
-| **1. Identify Optimal Feature Set** | Generated and compared 3 distinct feature tracks:<br>• **4B:** Wrapper (RFE)<br>• **4C:** RF Importance<br>• **4D:** Lasso ($L1$) | **Track 4D (Lasso)** was identified as the optimal set. It consistently produced the highest accuracy scores across multiple algorithms, proving that sparse selection (375 features) is superior to strict reduction (25 features). |
+| **1. Identify Optimal Feature Set** | Generated and compared 3 distinct feature tracks:<br>• **4B:** Wrapper (RFE)<br>• **4C:** RF Importance<br>• **4D:** Lasso ($L1$) | **Track 4D (Lasso)** was identified as the optimal set. It consistently produced the highest accuracy scores across multiple algorithms, proving that sparse selection (~375 features) is superior to strict reduction (25 features). |
 | **2. Compare ML Algorithms** | Conducted a "Bake-Off" using 5-Fold Cross-Validation across 7 algorithms:<br>• SVM, DT, RF, KNN, LR, GBM, XGBoost | **Gradient Boosting** emerged as the superior algorithm (**82.99% Acc**), significantly outperforming simple models like Decision Trees (73%) and KNN (76%). The study established a clear performance hierarchy for wafer classification. |
 
 ---
