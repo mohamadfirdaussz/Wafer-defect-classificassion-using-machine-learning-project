@@ -66,7 +66,7 @@ The entire workflow is orchestrated by `main.py`, which executes these stages se
 
 | Stage | Script | Key Operations | Input $\to$ Output |
 | :--- | :--- | :--- | :--- |
-| **1** | `data_loader.py` | **Cleaning & Balancing**<br>• Filters unlabeled data.<br>• **Denoising:** Applies $2\times2$ Median Filter.<br>• **Resizing:** Standardizes maps to $64\times64$.<br>• **Undersampling:** Caps majority classes at 500 samples. | Raw `.pkl` <br>$\downarrow$<br> `cleaned_balanced.npz` |
+| **1** | `data_loader.py` | **Cleaning & Balancing**<br>• Filters unlabeled data.<br>• **Denoising:** Applies $2\times2$ Median Filter.<br>• **Resizing:** Standardizes maps to $64\times64$.<br>• **Undersampling:** Caps majority classes at 500 samples. | Raw `.pkl` <br>$\downarrow$<br> `cleaned_balanced_wm811k.npz` |
 | **2** | `feature_engineering.py` | **Feature Extraction**<br>• **Density:** 13 Spatial Regions.<br>• **Geometry:** Area, Perimeter, Eccentricity.<br>• **Radon:** Projections for line detection. | `.npz` <br>$\downarrow$<br> `features_dataset.csv` |
 | **3** | `data_preprocessor.py` | **Leak-Proof Prep**<br>• **Split:** 70% Train / 30% Test.<br>• **Scale:** Standard Scaler (Fit on Train only).<br>• **SMOTE:** Applied **only** to Training data. | `.csv` <br>$\downarrow$<br> `model_ready_data.npz` |
 | **3.5** | `feature_combination.py` | **Feature Expansion**<br>• Creates interaction terms: $A+B, A-B, A \times B, A/B$.<br>• Expands 65 features to **~8,450**. | `.npz` <br>$\downarrow$<br> `data_track_4E.csv` |
@@ -74,6 +74,7 @@ The entire workflow is orchestrated by `main.py`, which executes these stages se
 | **5** | `model_tuning.py` | **Evaluation**<br>• 5-Fold Cross-Validation on 7 Models.<br>• Final test on unseen data.<br>• Generates Confusion Matrices. | `.npz` <br>$\downarrow$<br> `confusion_matrix.png` |
 
 ---
+
 
 ## 📊 Experimental Results
 

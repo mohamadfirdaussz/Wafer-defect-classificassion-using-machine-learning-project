@@ -1,23 +1,42 @@
-# === Wafer Defect Classification Project Requirements ===
+# === WM-811K Wafer Defect Classification Requirements ===
 #
-# This file lists the core Python dependencies for the project.
-# To install them, activate your virtual environment and run:
-#
+# This file lists all Python dependencies required to run the pipeline.
+# To install, activate your environment and run:
 # pip install -r requirements.txt
 #
 
-#Machine Learning Libraries
-pandas
+# --- Core Data Science ---
 numpy
+pandas
 scipy
-scikit-image
-scikit-learn
-imbalanced-learn
-xgboost
-joblib
-tqdm
-seaborn
-matplotlib
 
-# Optional for interactive development and specific notebook features
+# --- Image Processing (Stage 1 & 2) ---
+# Used for Median Filter and Radon Transform
+scikit-image
+
+# --- Machine Learning & Preprocessing (Stage 3, 4, 5) ---
+# Used for Scaling, Splitting, Lasso, SVM, RF, GBM
+scikit-learn
+
+# --- Handling Class Imbalance (Stage 3) ---
+# Used for SMOTE
+imbalanced-learn
+
+# --- Advanced Boosting Algorithms (Stage 5) ---
+# The winning model library
+xgboost
+
+# --- Visualization (Stage 5 Results) ---
+# Used for Confusion Matrices
+matplotlib
+seaborn
+
+# --- Utilities & Performance ---
+# Used for Progress Bars
+tqdm
+# Used for Parallel Processing (saving/loading models)
+joblib
+
+# --- Optional / Interactive ---
 ipython
+jupyter
