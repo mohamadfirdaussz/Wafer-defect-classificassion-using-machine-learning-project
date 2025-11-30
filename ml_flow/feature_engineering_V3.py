@@ -55,7 +55,7 @@ from tqdm import tqdm
 
 # Paths (Updated to match Main Pipeline)
 INPUT_NPZ = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\cleaned_balanced_wm811k.npz"
-OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\preprocessing_results"
+OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\Feature_engineering_results"
 
 # Feature Parameters
 N_RADON_THETA = 72            # Number of angles for Radon transform
@@ -180,17 +180,21 @@ def fea_geom(img: np.ndarray) -> Sequence[float]:
     ]
 
 def fea_stats(img: np.ndarray) -> Sequence[float]:
-    """
-    Extracts basic statistics of the pixel values.
-    Useful for identifying overall noise levels or defect intensity.
-    """
     pixels = img.flatten()
+    
+    # Calculate variance first to check for flat images
+    variance = np.var(pixels)
+    
+    if variance == 0:
+        # If image is flat, skew/kurtosis are undefined (return 0)
+        return [float(np.mean(pixels)), 0.0, 0.0, 0.0, 0.0, float(np.median(pixels))]
+    
     return [
         float(np.mean(pixels)),
         float(np.std(pixels)),
-        float(np.var(pixels)),
-        float(skew(pixels)),
-        float(kurtosis(pixels)),
+        float(variance),
+        float(skew(pixels, nan_policy='omit')), # Safety arg
+        float(kurtosis(pixels, nan_policy='omit')), # Safety arg
         float(np.median(pixels))
     ]
 

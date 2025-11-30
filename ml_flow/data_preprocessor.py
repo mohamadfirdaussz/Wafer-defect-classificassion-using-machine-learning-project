@@ -157,7 +157,7 @@ def prepare_data_for_modeling(
 if __name__ == "__main__":
     
     # Define Paths
-    INPUT_CSV = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\preprocessing_results\features_dataset.csv"
+    INPUT_CSV = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\Feature_engineering_result\features_dataset.csv"
     OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\preprocessing_results"
 
     prepare_data_for_modeling(
