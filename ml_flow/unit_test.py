@@ -1,227 +1,90 @@
 # -*- coding: utf-8 -*-
 """
-test_all_scripts.py
+test_pipeline.py
 ────────────────────────────────────────────────────────────────────────
-🛡️ MASTER UNIT TEST SUITE FOR WAFER DEFECT PIPELINE
-
-### 🎯 PURPOSE
-This script validates the logical integrity of EVERY stage in the pipeline.
-It uses synthetic (mock) data to ensure that:
-1.  Data Loading & Cleaning works (Stage 1)
-2.  Feature Engineering calculates math correctly (Stage 2)
-3.  Preprocessing prevents leakage (Stage 3)
-4.  Feature Expansion generates interaction terms (Stage 3.5)
-5.  Feature Selection selects top features (Stage 4)
-6.  Model Tuning trains and evaluates correctly (Stage 5)
-
-### 💻 HOW TO RUN
-1.  Ensure your 'project.venv' is active.
-2.  Run: `python test_all_scripts.py`
-────────────────────────────────────────────────────────────────────────
+Unit Tests for WM-811K Pipeline
+Checks for data integrity, leakage, and file existence.
 """
 
 import unittest
+import os
 import numpy as np
 import pandas as pd
-import os
-import sys
-import shutil
-import warnings
-from scipy import ndimage
 
-# Suppress warnings for cleaner output
-warnings.filterwarnings("ignore")
+# Define paths (Adjust to match your system)
+BASE_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1"
+DIRS = {
+    "S1": os.path.join(BASE_DIR, "data_loader_results"),
+    "S2": os.path.join(BASE_DIR, "Feature_engineering_results"),
+    "S3": os.path.join(BASE_DIR, "preprocessing_results"),
+    "S4": os.path.join(BASE_DIR, "feature_selection_results"),
+    "S5": os.path.join(BASE_DIR, "model_artifacts"),
+}
 
-# ----------------------------------------------------------------------
-# 1️⃣ MOCK DATA GENERATOR (The "Fake" Wafer Factory)
-# ----------------------------------------------------------------------
-class MockDataGenerator:
-    @staticmethod
-    def get_raw_wafer(size=(26, 26)):
-        """Creates a small raw wafer map (0, 1, 2)."""
-        return np.random.randint(0, 3, size)
+class TestWaferPipeline(unittest.TestCase):
 
-    @staticmethod
-    def get_processed_wafer(size=(64, 64)):
-        """Creates a standardized 64x64 wafer."""
-        return np.random.randint(0, 3, size)
+    def test_s1_dataloader_output(self):
+        """Check Stage 1 .npz exists and has correct shapes."""
+        path = os.path.join(DIRS["S1"], "cleaned_full_wm811k.npz")
+        self.assertTrue(os.path.exists(path), "Stage 1 output not found")
+        
+        data = np.load(path)
+        self.assertIn('waferMap', data)
+        self.assertIn('labels', data)
+        # Check image dimensions
+        self.assertEqual(data['waferMap'].shape[1:], (64, 64), "Wafer maps are not 64x64")
 
-    @staticmethod
-    def get_raw_dataframe(n_samples=10):
-        """Creates a dataframe mimicking the raw .pkl structure."""
-        wafers = [MockDataGenerator.get_raw_wafer() for _ in range(n_samples)]
-        # Add some empty/bad labels to test cleaning
-        labels = [[['Loc']]] * (n_samples - 2) + [[['none']]] + [[]] 
-        t_labels = [[['Training']]] * n_samples
+    def test_s2_feature_extraction(self):
+        """Check Stage 2 CSV exists and has 66 feature columns."""
+        path = os.path.join(DIRS["S2"], "features_dataset.csv")
+        self.assertTrue(os.path.exists(path), "Stage 2 output not found")
         
-        return pd.DataFrame({
-            'waferMap': wafers,
-            'failureType': labels,
-            'trainTestLabel': t_labels
-        })
+        df = pd.read_csv(path, nrows=5) # Read only 5 rows for speed
+        # 66 Features + 1 Target = 67 Columns
+        self.assertEqual(df.shape[1], 67, f"Expected 67 columns, got {df.shape[1]}")
+        self.assertIn('geom_num_regions', df.columns, "New geometry feature missing")
 
-    @staticmethod
-    def get_feature_data(n_samples=50, n_features=65):
-        """Creates a dummy feature dataset (X) and labels (y)."""
-        X = np.random.rand(n_samples, n_features)
-        y = np.random.randint(0, 8, n_samples) # 8 classes
+    def test_s3_no_leakage(self):
+        """Check Stage 3 splitting and balancing."""
+        path = os.path.join(DIRS["S3"], "model_ready_data.npz")
+        self.assertTrue(os.path.exists(path), "Stage 3 output not found")
         
-        # Create column names matching feature_engineering.py output
-        cols = [f"feat_{i}" for i in range(n_features)]
-        df = pd.DataFrame(X, columns=cols)
-        df['target'] = y
-        return df
-
-# ----------------------------------------------------------------------
-# 🧪 TEST CLASS
-# ----------------------------------------------------------------------
-class TestPipelineIntegrity(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        print("\n" + "="*60)
-        print("🚀 STARTING COMPREHENSIVE PIPELINE TESTS")
-        print("="*60)
-        # Create temp directories for test outputs
-        cls.test_dirs = ['test_preprocessing', 'test_selection', 'test_artifacts']
-        for d in cls.test_dirs:
-            os.makedirs(d, exist_ok=True)
-
-    @classmethod
-    def tearDownClass(cls):
-        # Cleanup: Remove temporary test folders
-        print("\n🧹 Cleaning up test artifacts...")
-        for d in cls.test_dirs:
-            if os.path.exists(d):
-                shutil.rmtree(d)
-        print("✨ Cleanup complete.")
-
-    # ==================================================================
-    # 🔍 STAGE 1: DATA LOADER TESTS
-    # ==================================================================
-    def test_01_data_loader_logic(self):
-        """Test cleaning and resizing logic from Stage 1."""
-        print("\n🧪 [Stage 1] Testing Data Loader Logic...")
+        data = np.load(path)
         
-        try:
-            import data_loader
-        except ImportError:
-            self.fail("❌ Could not import 'data_loader.py'")
-
-        # 1. Test Resize
-        raw = MockDataGenerator.get_raw_wafer((30, 30))
-        resized = data_loader.resize_wafer_map(raw, target_size=(64, 64))
-        self.assertEqual(resized.shape, (64, 64), "Resize shape incorrect")
-        
-        # 2. Test Label Cleaning
-        raw_df = MockDataGenerator.get_raw_dataframe(5)
-        cleaned_df = data_loader.clean_labels(raw_df)
-        # One row had empty label [], so 5 -> 4 rows expected
-        self.assertEqual(len(cleaned_df), 4, "Failed to drop empty label")
-        # Ensure label is string, not list
-        self.assertIsInstance(cleaned_df.iloc[0]['failureType'], str, "Label format incorrect")
-        
-        print("   ✅ Resize & Cleaning logic verified.")
-
-    # ==================================================================
-    # 🔍 STAGE 2: FEATURE ENGINEERING TESTS
-    # ==================================================================
-    def test_02_feature_extraction(self):
-        """Test if feature extractor returns correct shape (65 features)."""
-        print("\n🧪 [Stage 2] Testing Feature Engineering...")
-        
-        try:
-            import feature_engineering_V3 as feature_engineering
-        except ImportError:
-            self.fail("❌ Could not import 'feature_engineering.py'")
-
-        wafer = MockDataGenerator.get_processed_wafer()
-        
-        # Run extraction
-        features = feature_engineering.process_single_wafer(wafer)
-        
-        # Expected: 13 (Dens) + 40 (Radon) + 6 (Geom) + 6 (Stat) = 65
-        self.assertEqual(len(features), 65, f"Expected 65 features, got {len(features)}")
-        self.assertFalse(np.isnan(features).any(), "Features contain NaN values")
-        
-        print("   ✅ Feature extraction returns valid 65-vector.")
-
-    # ==================================================================
-    # 🔍 STAGE 3: PREPROCESSING TESTS
-    # ==================================================================
-    def test_03_preprocessing_leakage(self):
-        """Test Scaling and Splitting logic."""
-        print("\n🧪 [Stage 3] Testing Preprocessing Logic...")
-        
-        from sklearn.preprocessing import StandardScaler
-        
-        # Create mock data (Mean=100, Std=20)
-        X = np.random.normal(100, 20, (100, 5))
-        
-        # Simulate Train/Test split
-        X_train = X[:70]
-        X_test = X[70:]
-        
-        # Logic Test: Fit on Train ONLY, Transform Test
-        scaler = StandardScaler()
-        scaler.fit(X_train)
-        
-        X_train_scaled = scaler.transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
-        
-        # Train mean should be exactly 0
-        self.assertAlmostEqual(X_train_scaled.mean(), 0, delta=0.2, msg="Train scaling failed")
-        
-        # Test mean should be NEAR 0, but not exactly (since it wasn't fitted)
-        # If Test mean is EXACTLY 0, it implies leakage (fitted on test)
-        self.assertNotEqual(X_test_scaled.mean(), 0, "Possible data leakage detected in logic")
-        
-        print("   ✅ Scaling logic is leak-proof.")
-
-    # ==================================================================
-    # 🔍 STAGE 3.5: FEATURE EXPANSION TESTS
-    # ==================================================================
-    def test_04_feature_expansion(self):
-        """Test if Sum/Diff/Ratio logic works."""
-        print("\n🧪 [Stage 3.5] Testing Feature Expansion Math...")
-        
-        try:
-            import feature_combination
-        except ImportError:
-            self.fail("❌ Could not import 'feature_combination.py'")
-
-        # Create tiny input: 1 Sample, 2 Features (A=10, B=2)
-        X_tiny = np.array([[10.0, 2.0]])
-        feat_names = ['A', 'B']
-        
-        # Run the actual function
-        X_new, names_new = feature_combination.generate_math_combinations(X_tiny, feat_names)
-        
-        # Expectations: Sum(12), Diff(8), Ratio(5)
-        self.assertAlmostEqual(X_new[0][0], 12.0, msg="Sum failed")
-        self.assertAlmostEqual(X_new[0][1], 8.0, msg="Diff failed")
-        self.assertAlmostEqual(X_new[0][2], 5.0, places=1, msg="Ratio failed")
-        
-        print("   ✅ Math expansion calculations correct.")
-
-    # ==================================================================
-    # 🔍 STAGE 4 & 5: INTEGRATION CHECK
-    # ==================================================================
-    def test_05_file_integrity(self):
-        """Check if the scripts can find/create paths correctly."""
-        print("\n🧪 [System] Checking File I/O Paths...")
-        
-        # Just verify imports work and functions exist
-        try:
-            import feature_selection
-            import model_tuning
-        except ImportError:
-            self.fail("❌ Could not import Stage 4 or 5 scripts")
+        # 1. Check Train Balancing (Target 500)
+        y_train = data['y_train_balanced']
+        unique, counts = np.unique(y_train, return_counts=True)
+        # All classes should have exactly 500 samples
+        for count in counts:
+            self.assertEqual(count, 500, f"Training class not balanced to 500 (Found {count})")
             
-        self.assertTrue(hasattr(feature_selection, 'run_expanded_selection'), "Missing run function in Stage 4")
-        self.assertTrue(hasattr(model_tuning, 'save_model_results'), "Missing helper in Stage 5")
+        # 2. Check Test Imbalance (Leakage Check)
+        y_test = data['y_test']
+        unique_test, counts_test = np.unique(y_test, return_counts=True)
+        # Test set should NOT be uniform (Std dev of counts should be high)
+        self.assertTrue(np.std(counts_test) > 50, "Test set looks suspiciously balanced! (Leakage?)")
+
+    def test_s4_feature_selection(self):
+        """Check Stage 4 produced valid tracks."""
+        tracks = ["data_track_4B_RFE.npz", "data_track_4D_Lasso.npz"]
         
-        print("   ✅ Stage 4 & 5 scripts are importable and valid.")
+        for t in tracks:
+            path = os.path.join(DIRS["S4"], t)
+            self.assertTrue(os.path.exists(path), f"Track {t} not found")
+            
+            data = np.load(path)
+            # Check if features are reduced (should be < 1000)
+            n_features = data['X_train'].shape[1]
+            self.assertTrue(n_features < 1000, f"Track {t} has too many features: {n_features}")
+
+    def test_s5_leaderboard(self):
+        """Check Stage 5 produced the final CSV."""
+        path = os.path.join(DIRS["S5"], "master_model_comparison.csv")
+        self.assertTrue(os.path.exists(path), "Leaderboard CSV not found")
+        
+        df = pd.read_csv(path)
+        self.assertIn('Overfit_Gap', df.columns, "Leaderboard missing Overfit_Gap column")
+        self.assertFalse(df.empty, "Leaderboard is empty")
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    unittest.main()

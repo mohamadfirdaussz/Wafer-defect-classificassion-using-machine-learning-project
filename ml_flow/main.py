@@ -2,199 +2,165 @@
 """
 main.py
 ────────────────────────────────────────────────────────────────────────
-WM-811K Wafer Defect Classification - Master Pipeline Orchestrator
+WM-811K Wafer Defect Classification - MASTER PIPELINE CONTROLLER
 
 ### 🎯 PURPOSE
-This script serves as the central command center for the Machine Learning lifecycle. 
-It orchestrates the sequential execution of all 5 stages.
+Orchestrates the entire machine learning workflow from Raw Data to Final Results.
+Executes Stages 1 through 5 in sequence.
 
-### ⚙️ PIPELINE ARCHITECTURE
-1.  **Data Loading:** Cleaning, Denoising, Balancing (Undersampling).
-2.  **Feature Engineering:** Extraction of Density, Radon, and Geometry features.
-3.  **Preprocessing:** Leak-proof Splitting, Scaling, and SMOTE.
-3.5 **Feature Expansion:** Mathematical combination of features (High-Dimensionality).
-4.  **Feature Selection:** Optimization via ANOVA Pre-filtering + RFE/Lasso.
-5.  **Model Tuning:** Cross-Validation "Bake-Off" and Final Test Evaluation.
+### ⚙️ EXECUTION FLOW
+1. Data Loader:         Raw Pickle -> Cleaned NPZ (Images)
+2. Feature Engineering: Images -> CSV (66 Features)
+3. Preprocessing:       CSV -> Balanced/Imbalanced NPZ (Train/Test Split)
+4. Feature Expansion:   NPZ -> Expanded NPZ (8500 Features)
+5. Feature Selection:   Expanded NPZ -> Track NPZs (RFE, Lasso, RF)
+6. Model Tuning:        Track NPZs -> Leaderboard CSV
 
 ### 💻 USAGE
-1.  Ensure your virtual environment is active.
-2.  Run: `python main.py`
+Run this script to reproduce the entire experiment.
 ────────────────────────────────────────────────────────────────────────
 """
 
-import subprocess
+import os
 import sys
 import time
-import os
-from datetime import datetime
+from datetime import timedelta
 
-# ───────────────────────────────────────────────
-# 📝 CONFIGURATION
-# ───────────────────────────────────────────────
+# Import your modules
+# Ensure these files are in the same directory or Python path
+try:
+    import data_loader
+    import feature_engineering
+    import data_preprocessor
+    import feature_combination
+    import feature_selection
+    import model_tuning
+except ImportError as e:
+    print(f"❌ Error importing modules: {e}")
+    print("   Ensure data_loader.py, feature_engineering.py, etc., are in this folder.")
+    sys.exit()
 
-# Get the directory where THIS script (main.py) is located
-# This ensures we find the other scripts even if running from the root folder
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# --- CONFIGURATION ---
+BASE_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1"
 
-# The sequence of scripts to execute
-PIPELINE_STAGES = [
-    {
-        "name": "Stage 1: Data Loading & Cleaning", 
-        "script": "data_loader.py",
-        "desc": "Loading .pkl, Denoising, Resizing to 64x64, Balancing classes."
-    },
-    {
-        "name": "Stage 2: Feature Engineering",     
-        "script": "feature_engineering_V3.py",
-        "desc": "Extracting 65 base features (Density, Radon, Geometry)."
-    },
-    {
-        "name": "Stage 3: Preprocessing",           
-        "script": "data_preprocessor.py",
-        "desc": "Stratified Split (70/30), Scaling, SMOTE (Train only)."
-    },
-    {
-        "name": "Stage 3.5: Feature Expansion",     
-        "script": "feature_combination.py",
-        "desc": "Expanding feature space (Interaction Terms)."
-    },
-    {
-        "name": "Stage 4: Feature Selection",       
-        "script": "feature_selection.py",
-        "desc": "Reducing features via ANOVA + RFE/Lasso/RF."
-    },
-    {
-        "name": "Stage 5: Model Tuning & Eval",     
-        "script": "model_tuning.py",
-        "desc": "Training 7 models on 3 tracks, Hyperparameter Tuning, Final Test."
-    }
-]
+# Define Paths for the Controller
+PATHS = {
+    "raw_data": os.path.join(BASE_DIR, "datasets", "LSWMD.pkl"),
+    "stage1_out": os.path.join(BASE_DIR, "data_loader_results", "cleaned_full_wm811k.npz"),
+    "stage2_out": os.path.join(BASE_DIR, "Feature_engineering_results", "features_dataset.csv"),
+    "stage3_dir": os.path.join(BASE_DIR, "preprocessing_results"),
+    "stage4_dir": os.path.join(BASE_DIR, "feature_selection_results"),
+    "stage5_dir": os.path.join(BASE_DIR, "model_artifacts"),
+}
 
-# Output directories to ensure exist before starting
-REQUIRED_DIRS = [
-    "preprocessing_results",
-    "feature_selection_results",
-    "model_artifacts"
-]
-
-# ───────────────────────────────────────────────
-# 🛠️ HELPER FUNCTIONS
-# ───────────────────────────────────────────────
-
-def log(message, level="INFO"):
-    """Prints a timestamped log message."""
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    icons = {"INFO": "ℹ️", "SUCCESS": "✅", "ERROR": "❌", "WARN": "⚠️", "START": "▶️"}
-    icon = icons.get(level, "")
-    print(f"[{timestamp}] {icon}  {message}")
-
-def setup_environment():
-    """Creates necessary directories and verifies environment."""
-    log("Initializing Pipeline Environment...", "INFO")
-    
-    # 1. Create Folders (Create them relative to the project root, or specific paths)
-    # Assuming folders should be created in the project root (one level up from ml_flow)
-    # OR in the same folder as scripts. Let's assume same folder for simplicity based on your previous config.
-    
-    # If you want them in the PARENT directory (root), use: os.path.dirname(BASE_DIR)
-    # If you want them in the CURRENT directory (ml_flow), use: BASE_DIR
-    
-    target_base = os.path.dirname(BASE_DIR) # Creates results in the project root
-    
-    for folder in REQUIRED_DIRS:
-        folder_path = os.path.join(target_base, folder)
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-            log(f"Created directory: {folder_path}", "INFO")
-            
-    # 2. Check Python Version
-    log(f"Python Interpreter: {sys.executable}", "INFO")
-    log(f"Script Directory: {BASE_DIR}", "INFO")
-    print("-" * 60)
-
-def run_stage(stage_config):
-    """
-    Executes a single stage of the pipeline using subprocess.
-    Returns True if successful, False if failed.
-    """
-    name = stage_config["name"]
-    script_name = stage_config["script"]
-    description = stage_config["desc"]
-
-    # Construct the full absolute path to the script
-    script_path = os.path.join(BASE_DIR, script_name)
-
-    # Check file existence
-    if not os.path.exists(script_path):
-        log(f"Script not found: {script_path}", "ERROR")
-        return False
-
-    print(f"\n" + "="*60)
-    log(f"STARTING {name}", "START")
-    print(f"      📄 Script: {script_name}")
-    print(f"      📝 Task: {description}")
-    print("="*60 + "\n")
-
-    start_time = time.time()
-
+def run_stage(stage_name, func, *args, **kwargs):
+    """Helper to run a stage and time it."""
+    print("\n" + "="*70)
+    print(f"🎬 STARTING STAGE: {stage_name}")
+    print("="*70)
+    start = time.time()
     try:
-        # Run the script and wait for it to finish
-        # sys.executable ensures we use the SAME virtual environment
-        process = subprocess.run(
-            [sys.executable, script_path],
-            check=True,  # Raises CalledProcessError on non-zero exit code
-            text=True,   # Ensures output streams are handled as text
-            cwd=BASE_DIR # CRITICAL: Execute the script inside the ml_flow folder
-        )
-        
-        duration = time.time() - start_time
-        print("\n" + "-"*60)
-        log(f"COMPLETED {name} in {duration:.2f}s", "SUCCESS")
-        print("-"*60)
-        return True
-
-    except subprocess.CalledProcessError as e:
-        print("\n" + "!"*60)
-        log(f"PIPELINE FAILED AT {name}", "ERROR")
-        print(f"      Exit Code: {e.returncode}")
-        print("!"*60)
-        return False
-        
-    except KeyboardInterrupt:
-        print("\n🛑 Execution interrupted by user.")
-        sys.exit(0)
-
-# ───────────────────────────────────────────────
-# 🚀 MAIN EXECUTION LOOP
-# ───────────────────────────────────────────────
+        func(*args, **kwargs)
+        elapsed = time.time() - start
+        print(f"\n✅ {stage_name} COMPLETED in {str(timedelta(seconds=int(elapsed)))}")
+    except Exception as e:
+        print(f"\n❌ {stage_name} FAILED: {e}")
+        sys.exit()
 
 def main():
-    global_start = time.time()
+    print("🚀 INITIALIZING WAFER DEFECT CLASSIFICATION PIPELINE 🚀")
+    total_start = time.time()
+
+    # --- STAGE 1: DATA LOADING ---
+    # Clean, Denoise, Resize (No Balancing)
+    run_stage(
+        "Stage 1: Data Loading",
+        data_loader.load_and_preprocess,
+        pickle_path=PATHS["raw_data"],
+        save_path=PATHS["stage1_out"],
+        target_size=(64, 64),
+        seed=42
+    )
+
+    # --- STAGE 2: FEATURE ENGINEERING ---
+    # Extract Density, Radon, Geometry, Stats
+    # Note: feature_engineering module usually has hardcoded paths in __main__,
+    # so we might need to adjust or rely on its internal config if imported.
+    # Ideally, we call extract_and_save() directly.
     
-    print("""
-    ############################################################
-       🏭  WM-811K WAFER DEFECT CLASSIFICATION PIPELINE
-    ############################################################
-    """)
+    # Update global config in module if necessary (Or just ensure module uses correct paths)
+    feature_engineering.INPUT_NPZ = PATHS["stage1_out"]
+    feature_engineering.OUTPUT_DIR = os.path.dirname(PATHS["stage2_out"])
+    
+    run_stage(
+        "Stage 2: Feature Extraction",
+        feature_engineering.extract_and_save
+    )
 
-    setup_environment()
+    # --- STAGE 3: PREPROCESSING ---
+    # Split, Scale, Hybrid Balance (Target 500)
+    run_stage(
+        "Stage 3: Data Preprocessing",
+        data_preprocessor.prepare_data_for_modeling,
+        feature_csv_path=PATHS["stage2_out"],
+        output_dir=PATHS["stage3_dir"],
+        test_split_size=0.3
+    )
 
-    # Loop through stages
-    for stage in PIPELINE_STAGES:
-        success = run_stage(stage)
+    # --- STAGE 3.5: FEATURE EXPANSION ---
+    # Create 8,500 Features
+    feature_combination.PREPROCESSING_DIR = PATHS["stage3_dir"]
+    feature_combination.OUTPUT_DIR = PATHS["stage4_dir"]
+    
+    # Load Balanced Data for this step
+    try:
+        import numpy as np
+        data = np.load(os.path.join(PATHS["stage3_dir"], "model_ready_data.npz"))
+        X_train = data['X_train_balanced']
+        y_train = data['y_train_balanced']
+        X_test = data['X_test']
+        y_test = data['y_test']
+    except Exception as e:
+        print(f"❌ Failed to load Stage 3 data: {e}")
+        sys.exit()
         
-        if not success:
-            log("Pipeline aborted due to critical error in previous stage.", "ERROR")
-            sys.exit(1)
+    run_stage(
+        "Stage 3.5: Feature Expansion",
+        lambda: feature_combination.safe_feature_expansion(X_train, X_test, y_train, y_test)
+        # Note: You'll need to adapt how safe_feature_expansion saves or call the save wrapper
+    )
+    # Wrapper to save the output of expansion
+    X_train_e, X_test_e, y_train_e, y_test_e, feat_names = feature_combination.safe_feature_expansion(X_train, X_test, y_train, y_test)
+    feature_combination.save_as_npz(
+        X_train_e, X_test_e, y_train_e, y_test_e, feat_names, 
+        os.path.join(PATHS["stage4_dir"], feature_combination.OUTPUT_BASE_NAME)
+    )
 
-    # Final Summary
-    total_duration = time.time() - global_start
-    print("\n\n")
-    print("#"*60)
-    log(f"FULL PIPELINE COMPLETED SUCCESSFULLY!", "SUCCESS")
-    print(f"      ⏱️  Total Time: {total_duration/60:.2f} minutes")
-    print("#"*60)
-    print("\nAnalyze your results in the 'model_artifacts' folder.")
+    # --- STAGE 4: FEATURE SELECTION ---
+    # Funnel: ANOVA -> RFE/Lasso/RF
+    input_expanded = f"{feature_combination.OUTPUT_BASE_NAME}_expanded.npz"
+    run_stage(
+        "Stage 4: Feature Selection",
+        feature_selection.run_feature_selection,
+        output_dir=PATHS["stage4_dir"],
+        input_file=input_expanded
+    )
+
+    # --- STAGE 5: MODEL TUNING ---
+    # Train Models, Evaluate, Save Leaderboard
+    model_tuning.INPUT_DIR = PATHS["stage4_dir"]
+    model_tuning.OUTPUT_DIR = PATHS["stage5_dir"]
+    
+    run_stage(
+        "Stage 5: Model Tuning & Comparison",
+        model_tuning.run_grand_comparison # assuming you renamed the main function to this
+    )
+
+    total_elapsed = time.time() - total_start
+    print("\n" + "="*70)
+    print(f"🎉 PIPELINE FINISHED SUCCESSFULLY in {str(timedelta(seconds=int(total_elapsed)))}")
+    print(f"📊 Check results in: {PATHS['stage5_dir']}")
+    print("="*70)
 
 if __name__ == "__main__":
     main()

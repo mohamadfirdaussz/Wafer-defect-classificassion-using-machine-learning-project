@@ -1,18 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # -*- coding: utf-8 -*-
 """
 feature_combination.py (Stage 3.5: Feature Expansion - Optimized)
@@ -34,14 +19,14 @@ to create a high-dimensional dataset (Track 4E) for feature selection.
     * **Ratio (/):** Relative proportion (e.g., Density relative to Area).
 4.  **Expansion Step 2: Polynomial Interactions**
     * **Product (×):** Captures "synergy" via `PolynomialFeatures`.
-5.  **Save:** Outputs the result as CSV files for Stage 4.
+5.  **Save:** Outputs the result as NPZ files for Stage 4 (Optimized from CSV).
 
 ────────────────────────────────────────────────────────────
 """
 
 import numpy as np
 import os
-import pandas as pd 
+import sys
 from sklearn.preprocessing import PolynomialFeatures
 
 # Define directory paths
@@ -56,9 +41,8 @@ OUTPUT_BASE_NAME = f"data_track_{OUTPUT_TRACK_NAME}"
 # Configuration for Combination
 COMBINATION_DEGREE = 2 
 INCLUDE_BIAS = False 
-TARGET_COL_NAME = 'target'
 
-# 🟢 ACTUAL 65 FEATURE NAMES 🟢
+# 🟢 ACTUAL 66 FEATURE NAMES (Updated to include geom_num_regions) 🟢
 INITIAL_FEATURE_NAMES = [
     'density_1', 'density_2', 'density_3', 'density_4', 'density_5', 'density_6',
     'density_7', 'density_8', 'density_9', 'density_10', 'density_11',
@@ -72,7 +56,7 @@ INITIAL_FEATURE_NAMES = [
     'radon_std_11', 'radon_std_12', 'radon_std_13', 'radon_std_14', 'radon_std_15',
     'radon_std_16', 'radon_std_17', 'radon_std_18', 'radon_std_19', 'radon_std_20', 
     'geom_area', 'geom_perimeter', 'geom_major_axis', 'geom_minor_axis', 
-    'geom_eccentricity', 'geom_solidity', 
+    'geom_eccentricity', 'geom_solidity', 'geom_num_regions', # <--- CRITICAL UPDATE
     'stat_mean', 'stat_std', 'stat_var', 'stat_skew', 'stat_kurt', 'stat_median'
 ]
 
@@ -80,13 +64,16 @@ INITIAL_FEATURE_NAMES = [
 def generate_math_combinations(X: np.ndarray, feature_names: list) -> tuple:
     """
     Generates new features using pairwise mathematical operations.
-    (Sum, Difference, Ratio) - Absolute Difference removed for performance.
+    (Sum, Difference, Ratio)
     """
     n_features = X.shape[1]
     X_new = []
     names_new = []
     
-    # Iterate over unique pairs (i < j) to avoid duplicates and self-interactions
+    # Use float32 to save RAM
+    X = X.astype(np.float32)
+    
+    # Iterate over unique pairs (i < j)
     for i in range(n_features):
         for j in range(i + 1, n_features):
             f_i = X[:, i]
@@ -103,12 +90,9 @@ def generate_math_combinations(X: np.ndarray, feature_names: list) -> tuple:
             names_new.append(f'{name_i}_MINUS_{name_j}')
             
             # 3. Ratio: (A / B)
-            epsilon = 1e-6 # Tiny number to prevent DivisionByZero errors
+            epsilon = 1e-6 
             X_new.append(f_i / (f_j + epsilon))
             names_new.append(f'{name_i}_DIV_{name_j}')
-            
-            # 4. Absolute Difference (|A - B|) --> REMOVED ❌
-            # Removed to reduce feature count by ~2000 features.
 
     X_combined_math = np.column_stack(X_new)
     print(f"   Generated {X_combined_math.shape[1]} features from 3 mathematical operations.")
@@ -124,14 +108,13 @@ def safe_feature_expansion(X_train: np.ndarray, X_test: np.ndarray, y_train: np.
     print(f"Original Feature Count: {X_train.shape[1]}")
     print("="*50)
     
-    # --- 1. Math Combinations (Trained on X_train, Applied to X_test) ---
+    # --- 1. Math Combinations ---
     print("-> Generating Pairwise Math Combinations (Sum, Diff, Ratio)...")
     X_train_math, names_train_math = generate_math_combinations(X_train, INITIAL_FEATURE_NAMES)
     X_test_math, _ = generate_math_combinations(X_test, INITIAL_FEATURE_NAMES) 
 
-    # --- 2. Polynomial Combinations (Trained on X_train, Applied to X_test) ---
+    # --- 2. Polynomial Combinations ---
     print("-> Generating Polynomial Interactions (Product only)...")
-    # PolynomialFeatures creates multiplicative interactions (A * B).
     poly = PolynomialFeatures(
         degree=COMBINATION_DEGREE, 
         include_bias=INCLUDE_BIAS, 
@@ -141,93 +124,90 @@ def safe_feature_expansion(X_train: np.ndarray, X_test: np.ndarray, y_train: np.
     # FIT only on the training data (CRITICAL: Prevents leakage)
     poly.fit(X_train)
     
-    # Transform both the training and test sets
-    X_train_poly = poly.transform(X_train)
-    X_test_poly = poly.transform(X_test)
+    # Transform both (Use float32)
+    X_train_poly = poly.transform(X_train).astype(np.float32)
+    X_test_poly = poly.transform(X_test).astype(np.float32)
     
-    # Get names for polynomial features
+    # Get names
     names_poly = poly.get_feature_names_out(input_features=INITIAL_FEATURE_NAMES)
     print(f"   Generated {X_train_poly.shape[1]} features from polynomial interactions.")
 
     # --- 3. FINAL COMBINATION ---
-    # Stack original features, math features, and polynomial features
-    X_train_expanded = np.column_stack([X_train, X_train_math, X_train_poly])
-    X_test_expanded = np.column_stack([X_test, X_test_math, X_test_poly])
+    X_train_expanded = np.column_stack([X_train.astype(np.float32), X_train_math, X_train_poly])
+    X_test_expanded = np.column_stack([X_test.astype(np.float32), X_test_math, X_test_poly])
     
-    # Combine feature names
     all_feature_names = INITIAL_FEATURE_NAMES + names_train_math + list(names_poly)
 
     new_features_count = X_train_expanded.shape[1]
     
     print(f"✅ Full Feature Expansion Complete.")
     print(f"   TOTAL Feature Count: {new_features_count} features")
+    print(f"   Train Shape: {X_train_expanded.shape}")
+    print(f"   Test Shape:  {X_test_expanded.shape}")
     
     return X_train_expanded, X_test_expanded, y_train, y_test, all_feature_names
 
 
-def save_combined_data_as_csv(X_train, X_test, y_train, y_test, feature_names: list, base_path: str):
-    """Saves the combined feature data into two separate CSV files with column names."""
+def save_as_npz(X_train, X_test, y_train, y_test, feature_names, base_path):
+    """
+    Saves the combined feature data into a Compressed NPZ file.
+    (CSV is skipped because >8000 columns creates massive files).
+    """
+    save_path = f"{base_path}_expanded.npz"
+    print(f"💾 Saving massive dataset to {save_path}...")
     
-    # 1. Create Training DataFrame
-    df_train = pd.DataFrame(X_train, columns=feature_names)
-    df_train[TARGET_COL_NAME] = y_train
-    train_path = f"{base_path}_Train.csv"
-    df_train.to_csv(train_path, index=False)
-    print(f"💾 Track {OUTPUT_TRACK_NAME} Training data saved successfully to {train_path}")
-
-    # 2. Create Testing DataFrame
-    df_test = pd.DataFrame(X_test, columns=feature_names)
-    df_test[TARGET_COL_NAME] = y_test
-    test_path = f"{base_path}_Test.csv"
-    df_test.to_csv(test_path, index=False)
-    print(f"💾 Track {OUTPUT_TRACK_NAME} Testing data saved successfully to {test_path}")
+    np.savez_compressed(
+        save_path,
+        X_train=X_train,
+        y_train=y_train,
+        X_test=X_test,
+        y_test=y_test,
+        feature_names=np.array(feature_names)
+    )
+    print(f"✅ Save Complete.")
 
 
 if __name__ == '__main__':
     
-    # --- 1. Define Paths ---
     input_path = os.path.join(PREPROCESSING_DIR, INPUT_FILE)
     output_base_path = os.path.join(OUTPUT_DIR, OUTPUT_BASE_NAME)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # --- 2. Load Preprocessed Data (from NPZ) ---
+    # --- 1. Load Preprocessed Data (from NPZ) ---
     try:
         with np.load(input_path) as data:
-            X_train = data['X_train']
-            y_train = data['y_train']
+            # 🟢 CRITICAL CHANGE: Load 'X_train_balanced'
+            # This is the ~4000 row dataset we created specifically for this step.
+            X_train = data['X_train_balanced']
+            y_train = data['y_train_balanced']
+            
+            # Load Test set (Locked)
             X_test = data['X_test']
             y_test = data['y_test']
+            
+            print(f"✅ Loaded Balanced Train: {X_train.shape} | Test: {X_test.shape}")
+            
+    except KeyError:
+        print(f"❌ ERROR: Keys not found in {INPUT_FILE}.")
+        print("   Ensure Stage 3 (data_preprocessor.py) ran successfully.")
+        sys.exit()
     except FileNotFoundError:
-        print(f"❌ ERROR: Input file '{INPUT_FILE}' not found in '{PREPROCESSING_DIR}'.")
-        print("Please ensure 'data_preprocessor.py' (Stage 3) has been run successfully.")
-        exit()
+        print(f"❌ ERROR: File '{INPUT_FILE}' not found in '{PREPROCESSING_DIR}'.")
+        sys.exit()
 
-    # --- 3. CRITICAL FIX: Clean NaNs before transformation ---
-    # Load arrays into DataFrames, drop NaNs, and split back
-    X_train_df = pd.DataFrame(X_train)
-    X_train_df[TARGET_COL_NAME] = y_train
-    X_test_df = pd.DataFrame(X_test)
-    X_test_df[TARGET_COL_NAME] = y_test
-    
-    X_train_df.dropna(inplace=True)
-    X_test_df.dropna(inplace=True)
+    # --- 2. Validation ---
+    if X_train.shape[1] != len(INITIAL_FEATURE_NAMES):
+        print(f"❌ CRITICAL ERROR: Feature count mismatch!")
+        print(f"   Data has {X_train.shape[1]} cols, but code defines {len(INITIAL_FEATURE_NAMES)} names.")
+        print("   Likely missing 'geom_num_regions' in the list.")
+        sys.exit()
 
-    X_train = X_train_df.drop(TARGET_COL_NAME, axis=1).values
-    y_train = X_train_df[TARGET_COL_NAME].values
-    
-    X_test = X_test_df.drop(TARGET_COL_NAME, axis=1).values
-    y_test = X_test_df[TARGET_COL_NAME].values
-    
-    print(f"✨ NaN Cleaning Complete. Final Train: {X_train.shape[0]} samples, Test: {X_test.shape[0]} samples.")
-    
-    # --- 4. Perform Full Expansion ---
+    # --- 3. Perform Full Expansion ---
     X_train_e, X_test_e, y_train_e, y_test_e, feature_names = safe_feature_expansion(
         X_train, X_test, y_train, y_test
     )
 
-    # --- 5. Save Output as CSV ---
-    save_combined_data_as_csv(
+    # --- 4. Save Output ---
+    save_as_npz(
         X_train_e, X_test_e, y_train_e, y_test_e, feature_names, output_base_path
     )
-
-    print(f"\nPipeline ready to use Track {OUTPUT_TRACK_NAME} ({X_train_e.shape[1]} features) in subsequent stages.")

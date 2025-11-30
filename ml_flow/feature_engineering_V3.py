@@ -6,13 +6,13 @@ WM-811K Wafer Defect Classification Pipeline
 
 ### 🎯 PURPOSE
 This script is the "Feature Extractor." It takes the raw 64x64 wafer images 
-and transforms them into a meaningful set of 65 numerical features.
+and transforms them into a meaningful set of 66 numerical features.
 
 Raw images are just grids of pixels (0, 1, 2). Machine learning models struggle 
 to learn complex patterns (like a scratch or a ring) from raw pixels alone. 
 We need to calculate "descriptors" that summarize the shape and distribution of defects.
 
-### ⚙️ FEATURES EXTRACTED (65 Total)
+### ⚙️ FEATURES EXTRACTED (66 Total)
 We extract 4 types of features to capture different aspects of the defect:
 
 1.  **Density Features (13):** * **What:** We divide the wafer into 13 regions (Center, Inner Ring, Outer Ring, etc.).
@@ -24,7 +24,8 @@ We extract 4 types of features to capture different aspects of the defect:
         (e.g., A 'Scratch' defect creates a very strong peak in the Radon transform 
         at a specific angle, whereas a 'Donut' creates a flat profile).
 
-3.  **Geometry Features (6):** * **What:** Properties of the largest defect cluster (Area, Perimeter, Eccentricity, Solidity).
+3.  **Geometry Features (7):** * **What:** Properties of the largest defect cluster (Area, Perimeter, Eccentricity, Solidity) 
+        PLUS the number of distinct defect regions.
     * **Why:** Describes the shape. 
         (e.g., 'Loc' is blobby (high solidity), 'Scratch' is thin (high eccentricity)).
 
@@ -32,7 +33,7 @@ We extract 4 types of features to capture different aspects of the defect:
     * **Why:** Captures the overall "noise" level and distribution of the wafer.
 
 ### 💻 OUTPUT
-Saves `features_dataset.csv` to `preprocessing_results/`.
+Saves `features_dataset.csv` to `Feature_engineering_results/`.
 ────────────────────────────────────────────────────────────────────────
 """
 
@@ -53,8 +54,8 @@ from tqdm import tqdm
 # 📝 CONFIGURATION
 # ───────────────────────────────────────────────
 
-# Paths (Updated to match Main Pipeline)
-INPUT_NPZ = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\cleaned_balanced_wm811k.npz"
+# UPDATE: Pointing to the FULL dataset ~172k wafers
+INPUT_NPZ = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\data_loader_results\cleaned_full_wm811k.npz"
 OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\Feature_engineering_results"
 
 # Feature Parameters
@@ -90,7 +91,6 @@ def cal_den(region: np.ndarray) -> float:
 def find_regions(img: np.ndarray) -> Sequence[float]:
     """
     Divides the wafer into 13 spatial zones to capture defect location.
-    
     Zones roughly correspond to:
     - 4 Edge regions (Top, Bottom, Left, Right)
     - 9 Inner grid regions (3x3 grid in the center)
@@ -108,15 +108,15 @@ def find_regions(img: np.ndarray) -> Sequence[float]:
         img[:, c_edges[4]:c_edges[5]],                  # Right Edge
         img[r_edges[4]:r_edges[5], :],                  # Bottom Edge
         img[:, c_edges[0]:c_edges[1]],                  # Left Edge
-        img[r_edges[1]:r_edges[2], c_edges[1]:c_edges[2]], # Inner Grid 1 (Top-Left)
-        img[r_edges[1]:r_edges[2], c_edges[2]:c_edges[3]], # Inner Grid 2 (Top-Center)
-        img[r_edges[1]:r_edges[2], c_edges[3]:c_edges[4]], # Inner Grid 3 (Top-Right)
-        img[r_edges[2]:r_edges[3], c_edges[1]:c_edges[2]], # Inner Grid 4 (Mid-Left)
-        img[r_edges[2]:r_edges[3], c_edges[2]:c_edges[3]], # Inner Grid 5 (DEAD CENTER)
-        img[r_edges[2]:r_edges[3], c_edges[3]:c_edges[4]], # Inner Grid 6 (Mid-Right)
-        img[r_edges[3]:r_edges[4], c_edges[1]:c_edges[2]], # Inner Grid 7 (Bot-Left)
-        img[r_edges[3]:r_edges[4], c_edges[2]:c_edges[3]], # Inner Grid 8 (Bot-Center)
-        img[r_edges[3]:r_edges[4], c_edges[3]:c_edges[4]]  # Inner Grid 9 (Bot-Right)
+        img[r_edges[1]:r_edges[2], c_edges[1]:c_edges[2]], # Inner Grid 1
+        img[r_edges[1]:r_edges[2], c_edges[2]:c_edges[3]], # Inner Grid 2
+        img[r_edges[1]:r_edges[2], c_edges[3]:c_edges[4]], # Inner Grid 3
+        img[r_edges[2]:r_edges[3], c_edges[1]:c_edges[2]], # Inner Grid 4
+        img[r_edges[2]:r_edges[3], c_edges[2]:c_edges[3]], # Inner Grid 5
+        img[r_edges[2]:r_edges[3], c_edges[3]:c_edges[4]], # Inner Grid 6
+        img[r_edges[3]:r_edges[4], c_edges[1]:c_edges[2]], # Inner Grid 7
+        img[r_edges[3]:r_edges[4], c_edges[2]:c_edges[3]], # Inner Grid 8
+        img[r_edges[3]:r_edges[4], c_edges[3]:c_edges[4]]  # Inner Grid 9
     ]
     return [cal_den(r) for r in regions]
 
@@ -156,19 +156,21 @@ def cubic_inter_features(sinogram: np.ndarray, output_points: int) -> np.ndarray
 def fea_geom(img: np.ndarray) -> Sequence[float]:
     """
     Extracts geometric properties of the largest defect cluster using `regionprops`.
-    - Area: Size of defect
-    - Perimeter: Length of boundary
-    - Major/Minor Axis: Length/Width of the blob
-    - Eccentricity: How elongated it is (0=circle, 1=line)
-    - Solidity: How convex/solid the shape is
+    - Area, Perimeter, Major/Minor Axis, Eccentricity, Solidity
+    - NEW: num_regions (Count of distinct defect blobs)
     """
     # Label connected regions (defect == 2)
     labels = measure.label(img == 2, connectivity=1)
-    if labels.max() == 0: return [0.0] * 6
+    
+    # If no defect found, return 7 zeros (6 props + 1 count)
+    if labels.max() == 0: return [0.0] * 7 
 
     # Find largest region by area
     props = measure.regionprops(labels)
     region = max(props, key=lambda r: r.area)
+    
+    # NEW: Count how many distinct defect blobs exist
+    num_regions = float(len(props))
     
     return [
         region.area,
@@ -176,7 +178,8 @@ def fea_geom(img: np.ndarray) -> Sequence[float]:
         region.major_axis_length,
         region.minor_axis_length,
         region.eccentricity,
-        region.solidity
+        region.solidity,
+        num_regions # <--- Added as the 7th geometry feature
     ]
 
 def fea_stats(img: np.ndarray) -> Sequence[float]:
@@ -220,7 +223,7 @@ def process_single_wafer(img: np.ndarray) -> np.ndarray:
     sinogram = _safe_radon(img_clean, n_theta=N_RADON_THETA)
     radon_feats = cubic_inter_features(sinogram, output_points=RADON_OUTPUT_POINTS)
     
-    # 3. Geometry Features (6)
+    # 3. Geometry Features (7) - Updated
     geom = fea_geom(img)
     
     # 4. Statistical Features (6)
@@ -244,7 +247,8 @@ def extract_and_save():
     X_imgs = data['waferMap']
     y_labels = data['labels']
     
-    logger.info(f"Extracting features for {len(X_imgs)} wafers (Jobs: {N_JOBS})...")
+    logger.info(f"Detected {len(X_imgs)} wafers.")
+    logger.info(f"Extracting features (Jobs: {N_JOBS}). This may take a while...")
     
     # Parallel Processing with Progress Bar
     X_features = Parallel(n_jobs=N_JOBS)(
@@ -257,8 +261,9 @@ def extract_and_save():
         [f"density_{i+1}" for i in range(13)] +
         [f"radon_mean_{i+1}" for i in range(RADON_OUTPUT_POINTS)] +
         [f"radon_std_{i+1}" for i in range(RADON_OUTPUT_POINTS)] +
+        # Updated Geometry columns to include num_regions
         ["geom_area", "geom_perimeter", "geom_major_axis", "geom_minor_axis", 
-         "geom_eccentricity", "geom_solidity"] +
+         "geom_eccentricity", "geom_solidity", "geom_num_regions"] +
         ["stat_mean", "stat_std", "stat_var", "stat_skew", "stat_kurt", "stat_median"]
     )
     
