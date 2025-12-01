@@ -1,187 +1,189 @@
-
+# -*- coding: utf-8 -*-
 """
 main.py
-────────────────────────────────────────────────────────────────────────────────
-WM-811K WAFER DEFECT CLASSIFICATION: MASTER PIPELINE CONTROLLER
-────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────
+WM-811K Wafer Defect Classification - Master Pipeline Orchestrator
 
 ### 🎯 PURPOSE
-This script orchestrates the entire Machine Learning workflow for the project.
-It executes the 5 sequential stages of the pipeline, ensuring that data flows 
-correctly from raw input to final model evaluation without data leakage.
+This script serves as the central command center. It automatically executes 
+the 5 sequential stages of the machine learning pipeline.
 
-### 🏗️ PIPELINE ARCHITECTURE
-The pipeline is designed as a series of standalone modules to ensure memory 
-efficiency and logical separation.
-
-    1️⃣  STAGE 1: DATA LOADING (`data_loader.py`)
-        - Input:  Raw 'LSWMD.pkl' file (800k+ wafers).
-        - Action: Cleans labels, removes 'Near-full', applies Median Filter denoising.
-        - Output: Resized (64x64) wafer images in .npz format.
-
-    2️⃣  STAGE 2: FEATURE ENGINEERING (`feature_engineering.py`)
-        - Input:  Cleaned wafer images.
-        - Action: Extracts 66 physics-based features:
-            * Density (13 regions)
-            * Radon Transform (Line detection for scratches)
-            * Geometry (Area, Perimeter, Compactness)
-        - Output: 'features_dataset.csv'.
-
-    3️⃣  STAGE 3: PREPROCESSING (`data_preprocessor.py`)
-        - Input:  Feature CSV.
-        - Action: **The Gatekeeper Step**.
-            * Splits data into Training (70%) and Testing (30%).
-            * LOCKS the Test set (No modification allowed).
-            * Applies **Dynamic Hybrid Balancing** to Training set only:
-              (Undersample majority to 2,500 / SMOTE minority to 500).
-        - Output: 'model_ready_data.npz'.
-
-    3️⃣.5️⃣ STAGE 3.5: FEATURE EXPANSION (`feature_combination.py`)
-        - Input:  Balanced Training Data.
-        - Action: Generates interaction terms (A+B, A*B, A/B).
-        - Result: Features explode from 66 -> ~8,500.
-        - Output: High-dimensional .npz file.
-
-    4️⃣  STAGE 4: FEATURE SELECTION (`feature_selection.py`)
-        - Input:  High-dimensional data.
-        - Action: Applies the "Funnel Strategy":
-            * Filter: ANOVA (removes bottom 90% of noise).
-            * Wrapper: RFE (Recursive Feature Elimination).
-            * Embedded: Lasso (L1) & Random Forest Importance.
-        - Output: 3 Optimized Feature Tracks (saved as .npz).
-
-    5️⃣  STAGE 5: MODEL TUNING (`model_tuning.py`)
-        - Input:  The 3 Feature Tracks.
-        - Action: The "Bake-Off".
-            * Trains 7 algorithms (SVM, XGBoost, etc.) using Cross-Validation.
-            * Evaluates on the **Locked Test Set**.
-            * Calculates "Overfit Gap" to detect memorization.
-        - Output: Leaderboard CSV, Confusion Matrices, ROC Curves.
+### ⚙️ PIPELINE ARCHITECTURE
+1.  **Data Loading:** Cleaning, Denoising, Balancing.
+2.  **Feature Engineering:** Extraction of Density, Radon, Geometry features.
+3.  **Preprocessing:** Leak-proof Splitting, Scaling, SMOTE.
+3.5 **Feature Expansion:** Creating 8,400+ interaction terms.
+4.  **Feature Selection:** Reducing features via RFE and Lasso.
+5.  **Model Tuning:** Training & Final Evaluation.
 
 ### 💻 USAGE
-Run this command in your terminal:
-    $ python main.py
-
-────────────────────────────────────────────────────────────────────────────────
+Run: `python main.py`
+────────────────────────────────────────────────────────────────────────
 """
 
+import subprocess
 import sys
 import time
-import subprocess
 import os
-from datetime import timedelta
+from datetime import datetime
 
-# ==========================================
-# ⚙️ CONFIGURATION & HELPER FUNCTIONS
-# ==========================================
+# ───────────────────────────────────────────────
+# 1️⃣ DYNAMIC CONFIGURATION
+# ───────────────────────────────────────────────
+# Get the directory where THIS script is located
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def run_step(script_name, description):
+# Define the sequence of scripts to execute
+PIPELINE_STAGES = [
+    {
+        "name": "Stage 1: Data Loading & Cleaning", 
+        "script": "data_loader.py",
+        "desc": "Loading .pkl, Denoising, Resizing to 64x64, Balancing."
+    },
+    {
+        "name": "Stage 2: Feature Engineering",     
+        "script": "feature_engineering.py",
+        "desc": "Extracting 65 base features (Density, Radon, Geometry)."
+    },
+    {
+        "name": "Stage 3: Preprocessing",           
+        "script": "data_preprocessor.py",
+        "desc": "Stratified Split (70/30), Scaling, SMOTE (Train only)."
+    },
+    {
+        "name": "Stage 3.5: Feature Expansion",     
+        "script": "feature_combination.py",
+        "desc": "Expanding feature space (Interaction Terms)."
+    },
+    {
+        "name": "Stage 4: Feature Selection",       
+        "script": "feature_selection.py",
+        "desc": "Reducing features via ANOVA + RFE/Lasso/RF."
+    },
+    {
+        "name": "Stage 5: Model Tuning & Eval",     
+        "script": "model_tuning.py",
+        "desc": "Training 7 models, Tuning, and Final Test Evaluation."
+    }
+]
+
+# Output directories to ensure exist before starting
+REQUIRED_DIRS = [
+    "data_loader_results",
+    "preprocessing_results",
+    "feature_selection_results",
+    "model_artifacts"
+]
+
+# ───────────────────────────────────────────────
+# 2️⃣ HELPER FUNCTIONS
+# ───────────────────────────────────────────────
+
+def log(message, level="INFO"):
+    """Prints a timestamped log message."""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    icons = {"INFO": "ℹ️", "SUCCESS": "✅", "ERROR": "❌", "WARN": "⚠️", "START": "▶️"}
+    icon = icons.get(level, "")
+    print(f"[{timestamp}] {icon}  {message}")
+
+def setup_environment():
+    """Creates necessary directories and verifies environment."""
+    log("Initializing Pipeline Environment...", "INFO")
+    
+    # Create Folders
+    for folder in REQUIRED_DIRS:
+        folder_path = os.path.join(BASE_DIR, folder)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+            log(f"Created directory: {folder}", "INFO")
+            
+    # Check Python Version
+    log(f"Python Interpreter: {sys.executable}", "INFO")
+    log(f"Project Directory: {BASE_DIR}", "INFO")
+    print("-" * 60)
+
+def run_stage(stage_config):
     """
-    Executes a python script as a subprocess.
-    
-    Args:
-        script_name (str): The filename of the script to run (e.g., 'data_loader.py').
-        description (str): A human-readable explanation of what this step does.
-    
-    Raises:
-        SystemExit: If the subprocess fails (returns non-zero exit code).
+    Executes a single stage of the pipeline using subprocess.
     """
-    print("\n" + "█" * 80)
-    print(f"🚀 STARTING: {script_name.upper()}")
-    print(f"📖 GOAL: {description}")
-    print("█" * 80 + "\n")
-    
+    name = stage_config["name"]
+    script_name = stage_config["script"]
+    description = stage_config["desc"]
+
+    # Construct absolute path to script
+    script_path = os.path.join(BASE_DIR, script_name)
+
+    if not os.path.exists(script_path):
+        log(f"Script not found: {script_name}", "ERROR")
+        return False
+
+    print(f"\n" + "="*60)
+    log(f"STARTING {name}", "START")
+    print(f"      📄 Script: {script_name}")
+    print(f"      📝 Task: {description}")
+    print("="*60 + "\n")
+
     start_time = time.time()
-    
-    # We use sys.executable to ensure we use the same Python interpreter (e.g., venv)
+
     try:
-        result = subprocess.run(
-            [sys.executable, script_name], 
-            check=True,  # Raises CalledProcessError on failure
-            capture_output=False # Let stdout print to console in real-time
+        # Run the script inside the current environment
+        process = subprocess.run(
+            [sys.executable, script_path],
+            check=True,
+            text=True,
+            cwd=BASE_DIR 
         )
         
-        elapsed = time.time() - start_time
-        print(f"\n✅ SUCCESS: {script_name} completed in {str(timedelta(seconds=int(elapsed)))}.")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"\n❌ FAILURE: {script_name} crashed with error code {e.returncode}.")
-        print("   Please check the error logs above.")
-        sys.exit(1)
-    except FileNotFoundError:
-        print(f"\n❌ ERROR: Could not find script '{script_name}'.")
-        print("   Make sure you are running this from the project root directory.")
-        sys.exit(1)
+        duration = time.time() - start_time
+        print("\n" + "-"*60)
+        log(f"COMPLETED {name} in {duration:.2f}s", "SUCCESS")
+        print("-"*60)
+        return True
 
-# ==========================================
-# 🚀 MAIN PIPELINE EXECUTION
-# ==========================================
+    except subprocess.CalledProcessError as e:
+        print("\n" + "!"*60)
+        log(f"PIPELINE FAILED AT {name}", "ERROR")
+        print(f"      Exit Code: {e.returncode}")
+        print("!"*60)
+        return False
+        
+    except KeyboardInterrupt:
+        print("\n🛑 Execution interrupted by user.")
+        sys.exit(0)
+
+# ───────────────────────────────────────────────
+# 3️⃣ MAIN EXECUTION LOOP
+# ───────────────────────────────────────────────
 
 def main():
-    total_start = time.time()
+    global_start = time.time()
     
-    print("\n" + "="*80)
-    print("   WM-811K WAFER DEFECT CLASSIFICATION PIPELINE   ")
-    print("   University Malaysia Sabah (UMS) - FYP 1        ")
-    print("="*80)
+    print("""
+    ############################################################
+       🏭  WM-811K WAFER DEFECT CLASSIFICATION PIPELINE
+    ############################################################
+    """)
 
-    # -----------------------------------------------------------
-    # STEP 1: LOAD & CLEAN
-    # -----------------------------------------------------------
-    run_step(
-        "data_loader.py",
-        "Load raw Pickle file, apply Median Filter denoising, and resize maps to 64x64."
-    )
+    setup_environment()
 
-    # -----------------------------------------------------------
-    # STEP 2: EXTRACT FEATURES
-    # -----------------------------------------------------------
-    run_step(
-        "feature_engineering.py",
-        "Transform images into 66 numerical descriptors (Radon, Density, Geometry)."
-    )
+    # Loop through stages
+    for stage in PIPELINE_STAGES:
+        success = run_stage(stage)
+        
+        if not success:
+            log("Pipeline aborted due to critical error in previous stage.", "ERROR")
+            sys.exit(1)
 
-    # -----------------------------------------------------------
-    # STEP 3: SPLIT & BALANCE (CRITICAL)
-    # -----------------------------------------------------------
-    run_step(
-        "data_preprocessor.py",
-        "Split Train/Test (70/30) and apply Dynamic Hybrid Balancing (SMOTE + Undersampling)."
-    )
-
-    # -----------------------------------------------------------
-    # STEP 3.5: EXPAND DIMENSIONS
-    # -----------------------------------------------------------
-    run_step(
-        "feature_combination.py",
-        "Generate polynomial interaction terms (creates ~8,500 features)."
-    )
-
-    # -----------------------------------------------------------
-    # STEP 4: SELECT BEST FEATURES
-    # -----------------------------------------------------------
-    run_step(
-        "feature_selection.py",
-        "Apply ANOVA Pre-filtering followed by Lasso, RFE, and Random Forest selection."
-    )
-
-    # -----------------------------------------------------------
-    # STEP 5: TRAIN & EVALUATE
-    # -----------------------------------------------------------
-    run_step(
-        "model_tuning.py",
-        "Train 7 models using Stratified CV and evaluate on the Locked Test Set."
-    )
-
-    # -----------------------------------------------------------
-    # COMPLETION
-    # -----------------------------------------------------------
-    total_elapsed = time.time() - total_start
-    print("\n" + "="*80)
-    print(f"🎉 PIPELINE COMPLETED SUCCESSFULLY")
-    print(f"⏱️  Total Execution Time: {str(timedelta(seconds=int(total_elapsed)))}")
-    print(f"📂 Results Location: {os.path.join(os.getcwd(), 'model_artifacts')}")
-    print("="*80 + "\n")
+    # Final Summary
+    total_duration = time.time() - global_start
+    print("\n\n")
+    print("#"*60)
+    log(f"FULL PIPELINE COMPLETED SUCCESSFULLY!", "SUCCESS")
+    print(f"      ⏱️  Total Time: {total_duration/60:.2f} minutes")
+    print("#"*60)
+    print("\nAnalyze your results in:")
+    for folder in REQUIRED_DIRS:
+        print(f"   📂 {folder}/")
 
 if __name__ == "__main__":
     main()
