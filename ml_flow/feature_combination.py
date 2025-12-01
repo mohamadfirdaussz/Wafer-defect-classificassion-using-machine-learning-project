@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 feature_combination.py (Stage 3.5: Feature Expansion - Optimized)
 ────────────────────────────────────────────────────────────

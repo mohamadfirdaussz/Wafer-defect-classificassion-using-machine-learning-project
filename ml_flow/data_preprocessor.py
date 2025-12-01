@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 data_preprocessor.py (Stage 3: Leak-Proof Data Preparation)
 ────────────────────────────────────────────────────────────────────────

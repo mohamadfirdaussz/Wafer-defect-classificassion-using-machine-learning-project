@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 feature_engineering.py (Stage 2: Feature Extraction)
 ────────────────────────────────────────────────────────────────────────
