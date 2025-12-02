@@ -1,69 +1,85 @@
-
+# -*- coding: utf-8 -*-
 """
-feature_selection.py (Stage 4: Two-Stage Feature Selection)
-────────────────────────────────────────────────────────────────────────
-WM-811K Wafer Defect Classification Pipeline
+📜 feature_selection.py (Stage 4: The Selection Funnel)
+────────────────────────────────────────────────────────────────────────────────
+WM-811K Feature Optimization Pipeline
 
 ### 🎯 PURPOSE
-This script solves the "Curse of Dimensionality" created by Feature Expansion.
-We currently have ~8,500 features, which is too many for complex models 
-(like SVM or XGBoost) to handle efficiently without overfitting.
+This script addresses the **Curse of Dimensionality**.
+Stage 3.5 generated ~6,500+ features. While these capture complex patterns, 
+using all of them would crash complex models (like SVM) and lead to severe overfitting.
 
-### ⚙️ THE OPTIMIZATION STRATEGY (The "Funnel" Approach)
-To process 8,500 features without crashing RAM or taking days, we use a 
-scientifically robust funnel strategy:
 
-1.  **Stage 1: Global Pre-Filtering (Fast & Rough)**
-    * **Method:** ANOVA (Analysis of Variance) F-value.
-    * **Action:** Rapidly discards the "noise" features that show no statistical 
-        correlation with the defect class.
-    * **Result:** Reduces search space from 8,500 -> 1,000 features.
 
-2.  **Stage 2: Fine Selection (Slow & Precise)**
-    We run three parallel "Tracks" to identify the optimal feature subset:
-    * **Track 4B (Wrapper):** Recursive Feature Elimination (RFE).
-        * *Logic:* Iteratively trains a model, kills the weakest feature, repeats.
-    * **Track 4C (Embedded):** Random Forest Importance.
-        * *Logic:* Measures how well a feature splits the data in decision trees.
-    * **Track 4D (Embedded):** Lasso (L1) Regularization.
-        * *Logic:* Mathematically forces coefficients of weak features to exactly zero.
+### ⚙️ THE STRATEGY: "The Funnel"
+We use a two-stage scientific approach to reduce features while keeping the signal:
 
-### 💻 OUTPUT
-Saves 3 optimized datasets (`.npz`) to `feature_selection_results/`.
+1. **Stage 1: Global Pre-Filtering (The Sieve)**
+   - **Method:** ANOVA (Analysis of Variance) F-value.
+   - **Logic:** Fast statistical test. Discards features that have statistically 
+     zero correlation with the defect label.
+   - **Reduction:** ~6,500 → 1,000 features.
+
+2. **Stage 2: Fine Selection (The Magnifying Glass)**
+   - We run 3 parallel "Tracks" to find the best subset. Each uses a different mathematical logic:
+     - **Track 4B (Wrapper - RFE):** Recursively removes the weakest feature until 25 remain.
+     - **Track 4C (Embedded - Random Forest):** Keeps features that best split the decision trees.
+     - **Track 4D (Embedded - Lasso):** Uses L1 regularization to mathematically force weak coefficients to zero.
+
+### 📦 OUTPUT
+Saves three optimized datasets (`.npz`) to `feature_selection_results/`.
 These "Golden Subsets" will compete in the final Model Tuning stage.
-────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────
 """
 
 import os
 import sys
 import numpy as np
 import pandas as pd
+import warnings
+import joblib
+from typing import List, Tuple
+
+# ML Imports
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import RFE, SelectKBest, f_classif
 from sklearn.linear_model import LogisticRegression
-import warnings
-import joblib
 
-# Suppress warnings
+# Suppress convergence warnings for cleaner output
 warnings.filterwarnings("ignore")
 
-# ───────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
 # 📝 CONFIGURATION
-# ───────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Directories
+INPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_selection_results"
 OUTPUT_DIR = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\feature_selection_results"
-# Input comes from Stage 3.5 (The expanded NPZ file)
+
+# Input Filename (Output from Stage 3.5)
 INPUT_FILE = "data_track_4E_Full_Expansion_expanded.npz"
 
-# Selection Hyperparameters
-N_PREFILTER = 1000        # Step 1: ANOVA reduces 8500 -> 1000
-N_FEATURES_RFE = 25       # Step 2: RFE selects top 25
-N_FEATURES_RF = 25        # Step 2: RF selects top 25
+# Hyperparameters (The Funnel Sizes)
+N_PREFILTER = 1000      # Stage 1: ANOVA target
+N_FEATURES_RFE = 25     # Track 4B: Final target
+N_FEATURES_RF = 25      # Track 4C: Final target
 
 
-def save_track_data(output_dir, track_name, X_train, X_test, y_train, y_test, features):
+# ──────────────────────────────────────────────────────────────────────────────
+# 1️⃣ HELPER FUNCTIONS
+# ──────────────────────────────────────────────────────────────────────────────
+
+def save_track_data(
+    output_dir: str, 
+    track_name: str, 
+    X_train: np.ndarray, 
+    X_test: np.ndarray, 
+    y_train: np.ndarray, 
+    y_test: np.ndarray, 
+    features: List[str]
+):
     """
-    Saves a selected subset of features (Track) to a compressed .npz file.
-    This allows the next stage (Model Tuning) to load only the best 25 features.
+    Saves a 'Golden Subset' of features to a compressed .npz file.
     """
     file_path = os.path.join(output_dir, f"data_track_{track_name}.npz")
     
@@ -75,72 +91,78 @@ def save_track_data(output_dir, track_name, X_train, X_test, y_train, y_test, fe
         y_test=y_test,
         feature_names=np.array(features)
     )
-    print(f"✅ Saved Track {track_name}: {X_train.shape[1]} features at {file_path}")
+    print(f"✅ Saved Track {track_name}: {X_train.shape[1]} features")
+    print(f"   Path: {file_path}")
 
 
-def run_feature_selection(output_dir, input_file):
+def run_feature_selection(input_dir: str, output_dir: str, input_file: str):
+    """
+    Main execution flow for the Feature Selection Funnel.
+    """
+    input_path = os.path.join(input_dir, input_file)
+    print(f"\n" + "="*50)
+    print(f"🏃 STARTING FEATURE SELECTION FUNNEL")
+    print(f"   Input: {input_file}")
+    print("="*50)
     
-    input_path = os.path.join(output_dir, input_file)
-    print(f"\n=== 🏃 Starting Feature Selection on {input_file} ===")
-    
-    # -------------------------------------------------------
-    # 1. LOAD DATA (FROM NPZ)
-    # -------------------------------------------------------
+    # --- 1. Load Data ---
     if not os.path.exists(input_path):
         print(f"❌ ERROR: File not found at {input_path}")
         return
 
-    print(f"📂 Loading NPZ data (High-Dimensional)...")
-    data = np.load(input_path, allow_pickle=True)
-    
-    # These are the BALANCED training sets from Stage 3.5
-    X_train = data['X_train']
-    y_train = data['y_train']
-    X_test = data['X_test']
-    y_test = data['y_test']
-    feature_names = data['feature_names']
-    
-    print(f"✅ Data Loaded. X_train: {X_train.shape} | X_test: {X_test.shape}")
-    print(f"   Total Features to process: {len(feature_names)}")
+    print(f"📂 Loading High-Dimensional Data...")
+    try:
+        data = np.load(input_path, allow_pickle=True)
+        X_train = data['X_train']
+        y_train = data['y_train']
+        X_test = data['X_test']
+        y_test = data['y_test']
+        feature_names = data['feature_names']
+        
+        print(f"   Loaded Train: {X_train.shape} | Test: {X_test.shape}")
+        print(f"   Total Features: {len(feature_names)}")
+    except KeyError as e:
+        print(f"❌ Error loading NPZ keys: {e}")
+        return
 
-    # -------------------------------------------------------
-    # ⚡ GLOBAL OPTIMIZATION: PRE-FILTERING (ANOVA)
-    # -------------------------------------------------------
-    # Cut 8,500 -> 1,000 features quickly using F-score
+    # ──────────────────────────────────────────────────────────────────────────
+    # ⚡ STAGE 1: GLOBAL PRE-FILTERING (ANOVA)
+    # ──────────────────────────────────────────────────────────────────────────
+    # Goal: Quickly cut 6,500 -> 1,000 using simple statistics.
+    # Why: Running RFE on 6,500 features would take days. ANOVA takes seconds.
     
     if X_train.shape[1] > N_PREFILTER:
-        print(f"\n⚡ GLOBAL OPTIMIZATION: Pre-filtering to top {N_PREFILTER} via ANOVA...")
+        print(f"\n⚡ STAGE 1: Pre-filtering (ANOVA F-value)...")
+        print(f"   Reducing {X_train.shape[1]} -> {N_PREFILTER} features.")
         
-        # Select Top K based on F-value
         pre_selector = SelectKBest(score_func=f_classif, k=N_PREFILTER)
         X_train_filtered = pre_selector.fit_transform(X_train, y_train)
         
-        # Get mask of survivors to track names
+        # Get mask of survivors
         filter_mask = pre_selector.get_support()
         filtered_feature_names = feature_names[filter_mask]
         
-        print(f"   Reduced search space: {X_train.shape[1]} -> {X_train_filtered.shape[1]}")
+        print(f"   ✅ Pre-filter complete.")
     else:
-        print("\n⚡ SKIPPING PRE-FILTER (Feature count already low).")
+        print("\n⚡ SKIPPING STAGE 1 (Feature count already low).")
         X_train_filtered = X_train
         filtered_feature_names = feature_names
 
-    # -------------------------------------------------------
-    # TRACK 4B: WRAPPER METHOD (RFE)
-    # -------------------------------------------------------
-    print(f"\n--- Track 4B: Wrapper (RFE) ---")
-    print(f"🔄 Running RFE on filtered set (Target: {N_FEATURES_RFE})...")
+    # ──────────────────────────────────────────────────────────────────────────
+    # 🔄 TRACK 4B: WRAPPER METHOD (RFE)
+    # ──────────────────────────────────────────────────────────────────────────
+    print(f"\n--- Track 4B: Recursive Feature Elimination (RFE) ---")
+    print(f"   Target: {N_FEATURES_RFE} features")
     
-    # We use Logistic Regression as the estimator because it's faster than SVM
-    # for high-dimensional data, but still linear.
+    # We use Logistic Regression as the 'estimator' because it is linear and fast.
+    # step=50: Drops 50 weakest features per iteration (speeds up process).
     model_rfe = LogisticRegression(solver='liblinear', random_state=42, max_iter=1000)
-    
-    # step=50 means we drop 50 features at a time to speed up the loop
     rfe = RFE(model_rfe, n_features_to_select=N_FEATURES_RFE, step=50, verbose=1)
     
+    print("   Running RFE (this may take a moment)...")
     rfe.fit(X_train_filtered, y_train)
     
-    # Extract names of survivors
+    # Extract survivors
     rfe_names = filtered_feature_names[rfe.support_]
     
     # Map back to original X_train
@@ -150,19 +172,20 @@ def run_feature_selection(output_dir, input_file):
     
     save_track_data(output_dir, "4B_RFE", X_train_4B, X_test_4B, y_train, y_test, rfe_names)
 
-    # -------------------------------------------------------
-    # TRACK 4C: EMBEDDED METHOD (Random Forest)
-    # -------------------------------------------------------
-    print(f"\n--- Track 4C: Embedded (Random Forest) ---")
-    print(f"🌲 Training Random Forest on FULL set (Target: {N_FEATURES_RF})...")
+    # ──────────────────────────────────────────────────────────────────────────
+    # 🌲 TRACK 4C: EMBEDDED METHOD (Random Forest)
+    # ──────────────────────────────────────────────────────────────────────────
+    print(f"\n--- Track 4C: Random Forest Importance ---")
+    print(f"   Target: {N_FEATURES_RF} features")
     
-    # RF handles high-dimensions well, so we can feed it the full X_train
+    # RF is robust against noise, so we can feed it the original X_train (not filtered)
+    # if we have enough RAM, but using filtered is safer for speed.
     rf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
-    rf.fit(X_train, y_train)
+    rf.fit(X_train, y_train) # Using full set to capture non-linear interactions ANOVA missed
     
-    # Get importance
     importances = rf.feature_importances_
-    # Get indices of top N
+    
+    # Get indices of top K importance scores
     indices = np.argsort(importances)[-N_FEATURES_RF:]
     
     rf_names = feature_names[indices]
@@ -171,33 +194,35 @@ def run_feature_selection(output_dir, input_file):
     
     save_track_data(output_dir, "4C_RF_Importance", X_train_4C, X_test_4C, y_train, y_test, rf_names)
     
-    # Save Ranking CSV for Thesis Analysis
+    # Save CSV Ranking for Thesis
     ranking_df = pd.DataFrame({'Feature': feature_names, 'Importance': importances})
     ranking_df = ranking_df.sort_values(by='Importance', ascending=False)
-    ranking_df.to_csv(os.path.join(output_dir, "RF_Feature_Importance_Ranking.csv"), index=False)
+    ranking_csv = os.path.join(output_dir, "RF_Feature_Importance_Ranking.csv")
+    ranking_df.to_csv(ranking_csv, index=False)
+    print(f"   📄 Feature Ranking saved to {ranking_csv}")
 
-    # -------------------------------------------------------
-    # TRACK 4D: EMBEDDED METHOD (Lasso L1)
-    # -------------------------------------------------------
-    print("\n--- Track 4D: Embedded (Lasso L1) ---")
-    print(f"📉 Fitting Lasso to force sparsity...")
+    # ──────────────────────────────────────────────────────────────────────────
+    # 📉 TRACK 4D: EMBEDDED METHOD (Lasso L1)
+    # ──────────────────────────────────────────────────────────────────────────
+    print("\n--- Track 4D: Lasso Regularization (L1) ---")
+    print(f"   Applying sparsity penalty...")
     
-    # C=0.01 is a strong penalty. Smaller C = Fewer features selected.
+    # C=0.005 is a strong penalty (Smaller C = More features removed).
     l1_model = LogisticRegression(
         penalty='l1', solver='liblinear', C=0.005, random_state=42, max_iter=2000
     )
     
     l1_model.fit(X_train_filtered, y_train)
     
-    # Keep coefficients that are NOT zero
+    # Select features where coefficient is NOT zero
     l1_support = np.any(np.abs(l1_model.coef_) > 1e-5, axis=0)
     lasso_names = filtered_feature_names[l1_support]
     
     print(f"   Lasso selected {len(lasso_names)} features.")
     
-    # Fallback if Lasso kills everything (selects 0 features)
+    # Safety: If Lasso kills everything, fallback to Top 25 from ANOVA
     if len(lasso_names) < 2:
-        print("⚠️ Lasso selected too few features. Fallback to top 25 from Pre-filter.")
+        print("⚠️ WARNING: Lasso selected too few features. Falling back to Top 25 ANOVA.")
         lasso_names = filtered_feature_names[:25]
     
     final_mask = np.isin(feature_names, lasso_names)
@@ -209,5 +234,8 @@ def run_feature_selection(output_dir, input_file):
 
 if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    run_feature_selection(OUTPUT_DIR, INPUT_FILE)
-    print("\n--- Feature Selection Complete! Ready for Model Tuning. ---")
+    run_feature_selection(INPUT_DIR, OUTPUT_DIR, INPUT_FILE)
+    
+    print("\n" + "="*50)
+    print("✅ FEATURE SELECTION COMPLETE")
+    print("Ready for Stage 5: Model Tuning.")
