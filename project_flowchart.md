@@ -131,7 +131,7 @@ The pipeline automatically runs these competing strategies in **Stage 4** and **
 
 ### 🅂 Track 4C: Random Forest Importance
 
-  * **Logic:** Measures how much "Gini Impurity" decreases when a feature is used to split a node.
+  * **Logic:** Measures how much "Gini Impurity" decreases when a feature is used to split a node.Gini impurity is a metric used in decision trees to measure node impurity, which is the likelihood of incorrectly classifying a randomly chosen element if it were labeled randomly. A low Gini impurity score indicates a node is pure (e.g., all elements belong to one class), while a high score means it is impure and mixed with many different classes
   * **Best For:** Finding non-linear relationships.
   * **Configuration:** 100 Trees, Target = 25 features.
 

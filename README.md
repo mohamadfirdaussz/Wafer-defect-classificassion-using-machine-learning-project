@@ -9,7 +9,7 @@ Stages of the pipeline are orchestrated via `main.py`, implementing a rigorous "
 ## Installation
 
 ```bash
-pip install numpy pandas scikit-learn imbalanced-learn xgboost scipy matplotlib seaborn
+pip install numpy pip install -r requirement.txt
 ```
 
 ## Usage
