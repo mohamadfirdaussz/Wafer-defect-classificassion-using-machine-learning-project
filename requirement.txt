@@ -1,0 +1,53 @@
+# === WM-811K Wafer Defect Classification Requirements ===
+#
+# This file lists all Python dependencies required to run the pipeline.
+# To install, activate your environment and run:
+# pip install -r requirements.txt
+#
+
+# --- Core Data Science ---
+numpy
+pandas
+scipy
+
+# --- Image Processing (Stage 1 & 2) ---
+# Used for Median Filter and Radon Transform
+scikit-image
+
+# --- Machine Learning & Preprocessing (Stage 3, 4, 5) ---
+# Used for Scaling, Splitting, Lasso, SVM, RF, GBM
+scikit-learn
+
+# --- Handling Class Imbalance (Stage 3) ---
+# Used for SMOTE
+imbalanced-learn
+
+# --- Advanced Boosting Algorithms (Stage 5) ---
+# The winning model library
+xgboost
+
+# --- Visualization (Stage 5 Results) ---
+# Used for Confusion Matrices
+matplotlib
+seaborn
+
+# --- Utilities & Performance ---
+# Used for Progress Bars
+tqdm
+# Used for Parallel Processing (saving/loading models)
+joblib
+
+# --- Optional / Interactive ---
+ipython
+jupyter
+
+# --- Enhanced Pipeline Dependencies ---
+# Bayesian hyperparameter optimization (Stage 5+)
+optuna
+
+# LightGBM for ensemble meta-learner
+lightgbm
+
+# Plotly for Optuna visualizations
+plotly
+kaleido
