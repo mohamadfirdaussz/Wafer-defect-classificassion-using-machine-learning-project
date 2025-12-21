@@ -1,113 +1,100 @@
+# 🔬 WM-811K Wafer Defect Classification
 
------
+This project implements a **leak-proof, 6-stage machine learning pipeline** for classifying semiconductor wafer defects using the WM-811K dataset. It leverages traditional ML techniques with high-dimensional feature engineering and dynamic class balancing.
 
-# WM-811K Wafer Defect Classification using traditional machine learning in Semiconductor
+---
 
-This project contains a modular pipeline for classifying semiconductor wafer defects using traditional Machine Learning.
-Stages of the pipeline are orchestrated via `main.py`, implementing a rigorous "Leak-Proof" architecture with dynamic class balancing.
+## 🚀 Quick Start (One-Click)
 
-## Installation
+For **Windows** users:
+1.  **Download** `LSWMD.pkl` from [Kaggle](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map).
+2.  **Place** it in a folder named `datasets/` in the project root.
+3.  **Double-click** `run_pipeline.bat`.
 
-```bash
-pip install numpy pip install -r requirement.txt
-```
+The script will automatically handle dependency installation and execute the full pipeline.
 
-## Dataset Setup
+---
 
-1.  **Download** the WM-811K dataset (specifically `LSWMD.pkl`) from [Kaggle](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map).
-2.  **Place** the file in the `datasets/` directory:
-    ```bash
-    wm811k_project/
-    └── datasets/
-        └── LSWMD.pkl  <-- Place file here
-    ```
-
-## Usage
-
-Run the full end-to-end experiment with:
+## 🛠️ Installation
 
 ```bash
-pip install numpy pip install -r requirement.txt
+pip install -r requirement.txt
 ```
 
-## Quick Start (One-Click)
+---
 
-For Windows users, simply double-click **`run_pipeline.bat`**. 
-This script will automatically:
-1. Check for the dataset.
-2. Install all required dependencies.
-3. Run the full pipeline.
+## 📈 Pipeline Architecture
 
-## Usage
+The pipeline is designed with a **"Gatekeeper" architecture** to ensure zero data leakage between training and testing.
 
-Run the full end-to-end experiment with:
+```mermaid
+graph TD
+    A[Raw Data: LSWMD.pkl] --> B[Stage 1: Cleaning & Denoising]
+    B --> C[Stage 2: Feature Extraction]
+    C --> D[Stage 3: Preprocessing & Balancing]
+    D --> E[Stage 3.5: Feature Expansion]
+    E --> F[Stage 4: Feature Selection Funnel]
+    F --> G[Stage 5: Model Bake-Off]
+    G --> H{Overfit Gap > 10%?}
+    H -- Yes --> I[Stage 6: Optimized Tuning]
+    H -- No --> J[Final Model Deployment]
+```
+
+### 1. **Cleaning & Denoising** (`data_loader.py`)
+- Removes near-full and unlabeled wafers.
+- Applies 2x2 Median Filter for denoising.
+- Resizes maps to a standard $64 \times 64$ using Nearest-Neighbor interpolation.
+
+### 2. **Feature Extraction** (`feature_engineering.py`)
+- Extracts **66 base features**: Radon Transform (lines/scratches), Density (13 regions), Geometry (Area, Perimeter), and Statistics.
+
+### 3. **The Gatekeeper** (`data_preprocessor.py`)
+- **🛡️ Leakage Prevention**: Locks away 30% for testing *before* any balancing.
+- **⚖️ Hybrid Balancing**: Applies SMOTE (Upsampling) for minority classes and Undersampling for the 'none' class on the training set only.
+
+### 4. **Feature Selection Funnel** (`feature_selection.py`)
+- Expands 66 features $\to$ ~8,500 interaction terms.
+- Funnels them through **ANOVA filter** and three tracks: **Lasso**, **RFE**, and **Random Forest**.
+
+---
+
+## 🏃 Usage
+
+Run the master controller to execute the full experiment:
 ```bash
-python ml_flow\main.py
+python ml_flow/main.py
 ```
 
-This executes all stages sequentially: Data Loading $\to$ Feature Extraction $\to$ Preprocessing $\to$ Expansion $\to$ Selection $\to$ Model Tuning $\to$ Optimized Tuning.
+### Manual Execution (Debugging)
+You can run individual stages as standalone scripts from within the `ml_flow/` directory:
+- `python data_loader.py`
+- `python feature_engineering.py`
+- `python data_preprocessor.py`
+- `python model_tuning_optimized.py` (Stage 6)
 
-To run specific stages manually for debugging:
+---
 
+## 📂 Project Structure
+
+```plaintext
+.
+├── datasets/                 # Input: LSWMD.pkl
+├── ml_flow/                  # Source Code 🧠
+├── data_loader_results/      # Stage 1 Outputs
+├── preprocessing_results/    # Stage 3/3.5 Balanced Assets
+├── feature_selection_results/# Stage 4 Selected Tracks
+├── model_artifacts/          # Stage 5/6 Visuals & Leaderboards
+└── logs/                     # Pipeline Logs
+```
+
+---
+
+## 🧪 Testing
+
+Verify the integrity of the entire pipeline:
 ```bash
-python data_loader.py       # Stage 1: Clean & Resize
-python feature_engineering.py # Stage 2: Extract Features
-python data_preprocessor.py   # Stage 3: Split & Balance
-python model_tuning_optimized.py # Stage 6: Regularized Tuning
+python ml_flow/unit_test.py
 ```
 
-## Directory Structure
-
-```
-wm811k_project/
-├── datasets/                   # Raw Input (LSWMD.pkl)
-├── data_loader_results/        # Cleaned Images (.npz)
-├── Feature_engineering_results/# Extracted Features (.csv)
-├── preprocessing_results/      # Balanced Train / Locked Test (.npz)
-├── feature_selection_results/  # Expanded & Selected Feature Tracks
-├── model_artifacts/            # Confusion Matrices & Leaderboards
-└── logs/
-```
-
-Unit tests and validation scripts are located in `test_pipeline.py`.
-
-## Pre-processing utilities
-
-Running the preprocessing stages will read the raw pickle file, apply image cleaning, and perform rigorous data splitting and balancing.
-
-```bash
-python data_loader.py        # Denoising & Resizing
-python data_preprocessor.py  # Hybrid Balancing (SMOTE + Undersampling)
-```
-
-Key modules:
-
-  - `data_loader.py` – Applies 2x2 Median Filter and Nearest-Neighbor resizing to 64x64.
-  - `feature_engineering.py` – Extracts Density, Radon Transform, and Geometry features.
-  - `data_preprocessor.py` – The "Gatekeeper" module. It locks away the Test Set and applies **Dynamic Hybrid Balancing** (Targeting 500 samples/class) only to the Training Set to prevent leakage.
-
-### Developer workflow
-
-The pipeline follows a strict transformation logic. It begins by loading raw wafer maps, extracting 66 base features, and expanding them into \~8,500 interaction terms via `feature_combination.py`.
-
-The high-dimensional data is then funneled through `feature_selection.py`, which applies:
-
-1.  **ANOVA Pre-filtering** (8,500 $\to$ 1,000 features).
-2.  **Fine Selection Tracks** (Lasso, RFE, Random Forest).
-
-Finally, `model_tuning.py` runs a "Bake-Off" comparison. It trains 7 algorithms (including SVM, XGBoost, LR) using Stratified Cross-Validation on the balanced training data, and evaluates them on the organic, imbalanced test set. It calculates the **Overfit Gap** ($F1_{Train} - F1_{Test}$) to ensure scientific validity. Check `model_artifacts/` for the final `confusion_matrix.png` and leaderboard CSVs.
-
-### Stage 6: Optimized Tuning ("The Nuclear Option")
-
-If the best models still show signs of overfitting (Gap > 0.10), `model_tuning_optimized.py` is executed. It applies:
-1.  **Data Pruning:** Randomly dropping 10% of training data to break SMOTE chains.
-2.  **Gaussian Jitter:** Adding noise (`sigma=0.001`) to "blur" synthetic points.
-3.  **Strict Regularization:** Forcing shallow trees and high penalties to prioritize generalization over accuracy.
-
-### Tests
-
-Run all pipeline integrity tests with:
-
-```bash
-python test_pipeline.py
-```
+---
+> **Note**: This pipeline emphasizes **Scientific Validity**. It measures the **Overfit Gap** ($F1_{Train} - F1_{Test}$) to ensure models generalize to organic, imbalanced real-world data.
