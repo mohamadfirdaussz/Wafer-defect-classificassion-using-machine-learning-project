@@ -208,13 +208,28 @@ def evaluate_and_save(
     base_dir: str
 ) -> Tuple[float, float, float, float, float]:
     """
-    Orchestrates the evaluation process.
-    1. Generates predictions.
-    2. Calculates Metrics (Accuracy, Macro F1, Recall, Overfit Gap).
-    3. Saves Artifacts (Reports, Matrices, Plots).
-    
+    Orchestrates the evaluation process for a single model candidate.
+
+    **Evaluation Strategy:**
+    1.  **Prediction:** Generates predictions on the *locked* Test set.
+    2.  **Scoring:** Calculates Macro F1 and Recall (crucial for imbalanced data).
+    3.  **Gap Analysis:** Compares Train F1 vs Test F1 to detect overfitting.
+    4.  **Artifacts:** Generates Confusion Matrix, ROC curves, and text reports.
+
+    Args:
+        model (Any): The trained scikit-learn compatible model.
+        X_train (np.ndarray): Training features.
+        y_train (np.ndarray): Training labels.
+        X_test (np.ndarray): Testing features.
+        y_test (np.ndarray): Testing labels.
+        feature_names (np.ndarray): Names of the features used.
+        track_name (str): The track identifier (e.g., '4B_RFE').
+        model_name (str): The algorithm name (e.g., 'XGBoost').
+        base_dir (str): Directory for saving results.
+
     Returns:
-        Tuple: (Test_Accuracy, Test_F1, Test_Recall, Train_F1, Overfit_Gap)
+        Tuple[float, float, float, float, float]: 
+            (Test_Accuracy, Test_F1, Test_Recall, Train_F1, Overfit_Gap)
     """
     save_path = os.path.join(base_dir, track_name, model_name)
     os.makedirs(save_path, exist_ok=True)
@@ -272,10 +287,22 @@ def evaluate_and_save(
 # ──────────────────────────────────────────────────────────────────────────────
 
 def get_models_and_grids() -> Tuple[Dict, Dict]:
+def get_models_and_grids() -> Tuple[Dict, Dict]:
     """
     Defines the Model instances and their Hyperparameter Search Spaces.
-    Note: Grids are kept 'strict' (limited depth, high regularization) 
-    to prevent overfitting on the small balanced training set.
+
+    **Why "Strict" Grids?**
+    The training set is artificially balanced using SMOTE. If we allow trees
+    to get too deep (e.g., depth=20) or C values too high, the models will
+    simply memorize the synthetic SMOTE points.
+    
+    We constrain the grids (e.g., max_depth=6, C=0.1) to force the models to
+    learn generalizable patterns (Density, Geometry) rather than specific points.
+
+    Returns:
+        Tuple[Dict, Dict]:
+            - models: Dictionary of {name: model_instance}
+            - param_grids: Dictionary of {name: param_grid_dict}
     """
     # 1. Define 7 Models
     models = {

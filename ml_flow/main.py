@@ -1,23 +1,62 @@
-# -*- coding: utf-8 -*-
 """
 main.py
 ────────────────────────────────────────────────────────────────────────
 WM-811K Wafer Defect Classification - Master Pipeline Orchestrator
 
 ### 🎯 PURPOSE
-This script serves as the central command center. It automatically executes 
-the 5 sequential stages of the machine learning pipeline.
+This script serves as the central command center for the entire machine learning workflow. 
+It automates the execution of the 5 sequential stages of the pipeline, ensuring that 
+dependencies (like previous stage outputs) are met before proceeding.
 
 ### ⚙️ PIPELINE ARCHITECTURE
-1.  **Data Loading:** Cleaning, Denoising, Balancing.
-2.  **Feature Engineering:** Extraction of Density, Radon, Geometry features.
-3.  **Preprocessing:** Leak-proof Splitting, Scaling, SMOTE.
-3.5 **Feature Expansion:** Creating 8,400+ interaction terms.
-4.  **Feature Selection:** Reducing features via RFE and Lasso.
-5.  **Model Tuning:** Training & Final Evaluation.
+The pipeline is designed as a strict DAG (Directed Acyclic Graph) where each stage 
+transforms data for the next:
+
+1.  **Stage 1: Data Loading (`data_loader.py`)**
+    -   **Input:** Raw `LSWMD.pkl` (811k wafers).
+    -   **Action:** Cleans labels, removes tiny wafers (<5x5), applies median filter (denoising), and resizes to 64x64.
+    -   **Output:** `cleaned_full_wm811k.npz`.
+
+2.  **Stage 2: Feature Engineering (`feature_engineering.py`)**
+    -   **Input:** Cleaned .npz file.
+    -   **Action:** Extracts 66 domain-specific features (Density grid, Radon transform lines, Geometry).
+    -   **Output:** `features_dataset.csv`.
+
+3.  **Stage 3: Preprocessing (`data_preprocessor.py`)**
+    -   **Input:** Feature CSV.
+    -   **Action:** Performs stratified train/test split (80/20), standard scaling (fit on train only), 
+        and hybrid balancing (Undersample Majority + SMOTE Minority).
+    -   **Output:** `model_ready_data.npz` (contains balanced Train set and locked Test set).
+
+4.  **Stage 3.5: Feature Expansion (`feature_combination.py`)**
+    -   **Input:** Model ready data.
+    -   **Action:** Creates interaction terms (A+B, A*B) to capture non-linear relationships. 
+        Expands 66 features to ~6,500.
+    -   **Output:** `expanded_data.npz`.
+
+5.  **Stage 4: Feature Selection (`feature_selection.py`)**
+    -   **Input:** Expanded data.
+    -   **Action:** Reduces dimensionality via 3 parallel tracks (ANOVA -> RFE, Random Forest, Lasso).
+    -   **Output:** 3 optimized datasets (`data_track_*.npz`).
+
+6.  **Stage 5: Model Tuning (`model_tuning.py`)**
+    -   **Input:** Optimized datasets.
+    -   **Action:** Trains 7 models (Logistic, SVM, XGBoost, etc.) per track using 3-fold CV. 
+        Selects best hyperparameters and evaluates on the locked Test set.
+    -   **Output:** `master_model_comparison.csv` and model artifacts.
+
+7.  **Stage 6: Optimized Tuning (`model_tuning_optimized.py`)**
+    -   **Input:** Best track features.
+    -   **Action:** Applies advanced regularization (pruning, jitter) to fix overfitting.
+    -   **Output:** Final production-ready model.
 
 ### 💻 USAGE
-Run: `python main.py`
+Run this script from the project root:
+    $ python ml_flow/main.py
+
+Dependencies:
+    - Requires all sub-scripts to be present in the `ml_flow/` directory.
+    - Requires `config.py` for shared path configuration.
 ────────────────────────────────────────────────────────────────────────
 """
 
@@ -118,9 +157,25 @@ def setup_environment():
     log(f"Project Directory: {BASE_DIR}", "INFO")
     print("-" * 60)
 
-def run_stage(stage_config):
+def run_stage(stage_config: dict) -> bool:
     """
-    Executes a single stage of the pipeline using subprocess.
+    Executes a single stage of the pipeline using a subprocess call.
+
+    This function wraps the execution of a Python script, providing accurate logging,
+    error handling, and execution timing. It ensures that the script runs within
+    the same Python environment as the orchestrator.
+
+    Args:
+        stage_config (dict): A dictionary containing:
+            - 'name': Human-readable name of the stage.
+            - 'script': Filename of the script to run (e.g., 'data_loader.py').
+            - 'desc': Brief description of what the stage does.
+
+    Returns:
+        bool: True if the subprocess exited with code 0 (Success), False otherwise.
+    
+    Raises:
+        Does not raise exceptions but catches subprocess.CalledProcessError and prints error logs.
     """
     name = stage_config["name"]
     script_name = stage_config["script"]

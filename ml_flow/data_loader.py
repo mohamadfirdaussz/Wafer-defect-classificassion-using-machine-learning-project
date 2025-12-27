@@ -49,6 +49,9 @@ warnings.filterwarnings("ignore")
 def load_dataset(pickle_path: str) -> pd.DataFrame:
     """
     Loads the main WM-811K dataset from a pickle file.
+    
+    This dataset typically contains ~811,457 wafer maps. The file is expected to be a
+    pandas DataFrame serialized with `pd.to_pickle`.
 
     Args:
         pickle_path (str): The absolute path to the .pkl file.
@@ -215,20 +218,24 @@ def resize_wafer_map(w: np.ndarray, target_size: Tuple[int, int] = (64, 64)) -> 
     """
     Resizes a single wafer map using Nearest Neighbor interpolation.
 
-    Note: Nearest Neighbor (order=0) is used to preserve the discrete 
-    pixel values (0, 1, 2) and avoid creating artifacts like 0.5.
+    **Why use Nearest Neighbor?**
+    The wafer map contains discrete class labels (0=Background, 1=Wafer, 2=Defect).
+    Using Bilinear or Bicubic interpolation would introduce float values (e.g., 1.5)
+    which ruins the discrete nature of the data. Nearest Neighbor preserves the exact
+    categorical values.
+
+    **Why 64x64?**
+    It is the "Sweet Spot":
+    1.  Small enough for fast feature extraction (thousands of wafers processed per minute).
+    2.  Large enough to preserve the morphology of defects (Scratches/Rings are still visible).
+    3.  Uniformity is required for vectorized numpy operations later in the pipeline.
 
     Args:
-        w (np.ndarray): The input wafer map array.
-        target_size (Tuple[int, int]): Desired (height, width).
+        w (np.ndarray): The input wafer map array (variable dimensions).
+        target_size (Tuple[int, int]): Desired (height, width). Defaults to (64, 64).
 
     Returns:
-        np.ndarray: The resized wafer map.
-        
-    **We resize to 64x64 because it is the "Sweet Spot":
-    1.Small enough to be fast.
-    2.Large enough to still see the defects.
-    3.Uniform so the math code doesn't crash.
+        np.ndarray: The resized 64x64 wafer map.
     """
     return ndimage.zoom(
         w, 

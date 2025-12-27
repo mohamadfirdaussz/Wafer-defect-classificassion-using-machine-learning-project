@@ -67,7 +67,28 @@ BEST_MODEL_PATH = os.path.join(MODEL_ARTIFACTS_DIR, "best_model_optimized.joblib
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_and_prep_data(path: str) -> Any:
-    """Loads Track 4B data and applies Anti-Overfitting transformations."""
+    """
+    Loads Track 4B data and applies Anti-Overfitting transformations.
+
+    **Why Drop Data? (Pruning)**
+    SMOTE creates synthetic points by drawing lines between existing minority samples.
+    If we keep 100% of the training data, models can "connect the dots" perfectly,
+    learning the geometric shape of the synthetic oversampling rather than the
+    underlying defect logic. Randomly dropping 10% breaks these perfect chains.
+
+    **Why Add Noise? (Gaussian Jitter)**
+    Adding small random noise (`sigma=0.001`) slightly shifts every data point.
+    This effectively "blurs" the decision boundary, forcing the model to learn
+    regions rather than specific coordinates. This is similar to Data Augmentation
+    in Deep Learning (e.g., rotating images).
+
+    Args:
+        path (str): Path to the `data_track_4B_RFE.npz` file.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+            X_train (pruned+jittered), y_train (pruned), X_test, y_test.
+    """
     if not os.path.exists(path):
         print(f"[ERROR] File not found at {path}")
         print("   Make sure you ran 'feature_selection.py' first.")
@@ -106,7 +127,19 @@ def load_and_prep_data(path: str) -> Any:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def get_models_and_grids() -> tuple:
-    """Defines models with highly conservative search spaces."""
+    """
+    Defines models with highly conservative search spaces for valid probability calibration.
+    
+    **Changes from Stage 5:**
+    1.  **Calibration:** Models like SVM and KNN are wrapped in `CalibratedClassifierCV`.
+        This enables them to output true probabilities (0.0 - 1.0) instead of just
+        distance scores. This is required for the "Confidence" meter in the dashboard.
+    2.  **Regularization:** L1/L2 penalties are increased for XGBoost and Logistic Regression.
+    3.  **Depth:** Tree depth is kept shallow (3-5) to prevent complex decision boundaries.
+
+    Returns:
+        tuple: (models, param_grids)
+    """
     
     models = {
         "LogisticReg": LogisticRegression(max_iter=3000, n_jobs=-1, random_state=42),

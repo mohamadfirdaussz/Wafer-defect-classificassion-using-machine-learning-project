@@ -79,6 +79,18 @@ def save_track_data(
 ):
     """
     Saves a 'Golden Subset' of features to a compressed .npz file.
+
+    Args:
+        output_dir (str): Directory where the file will be saved.
+        track_name (str): Identifier for the selection method (e.g., '4B_RFE').
+        X_train (np.ndarray): Reduced training data.
+        X_test (np.ndarray): Reduced testing data.
+        y_train (np.ndarray): Training labels.
+        y_test (np.ndarray): Testing labels.
+        features (List[str]): List of the selected feature names.
+
+    Returns:
+        None: Saves file to disk.
     """
     file_path = os.path.join(output_dir, f"data_track_{track_name}.npz")
     
@@ -96,7 +108,22 @@ def save_track_data(
 
 def run_feature_selection(input_file_path: str, output_dir: str):
     """
-    Main execution flow for the Feature Selection Funnel.
+    Orchestrates the Multi-Track Feature Selection Pipeline.
+
+    **The Funnel Architecture:**
+    1.  **Stage 1: ANOVA Pre-filtering (The Sieve)**
+        -   Fast statistical test (F-value) to discard features with zero correlation.
+        -   Reduces ~6,500 features to ~1,000.
+        -   Why? Computationally expensive wrappers like RFE would take days on 6,500 features.
+    
+    2.  **Stage 2: Fine Selection (The Tracks)**
+        -   **Track 4B (RFE):** Wrapper method. Recursively kills the weakest feature. Best accuracy.
+        -   **Track 4C (Random Forest):** Embedded method. Uses tree splits to find importance. Good for non-linear.
+        -   **Track 4D (Lasso):** Regularization method. Forces weak coefficients to zero. Best for interpretability.
+
+    Args:
+        input_file_path (str): Path to the expanded feature set (.npz).
+        output_dir (str): Directory to save the resulting 3 datasets.
     """
     print(f"\n" + "="*50)
     print(f"🏃 STARTING FEATURE SELECTION FUNNEL")

@@ -86,6 +86,15 @@ logger = configure_logging(__name__)
 def _validate_image(img: np.ndarray) -> np.ndarray:
     """
     Ensures the image is a valid 2D array and handles non-finite values.
+
+    Args:
+        img (np.ndarray): Input image array.
+
+    Returns:
+        np.ndarray: Validated 2D float32 image.
+    
+    Raises:
+        ValueError: If image is not 2D.
     """
     if img.ndim != 2:
         raise ValueError(f"Expected 2D image, got shape {img.shape}")
@@ -108,17 +117,22 @@ def cal_den(region: np.ndarray) -> float:
 
 def find_regions(img: np.ndarray) -> List[float]:
     """
-    Divides the wafer map into 13 spatial zones to capture defect location.
+    Divides the wafer map into 13 spatial zones to capture defect location patterns.
     
-    Zones logic:
-    - 4 Edge Strips (Top, Bottom, Left, Right)
-    - 9 Inner Grid Blocks (3x3 grid in the center)
-    
+    This feature is critical for distinguishing location-based defects:
+    - **Edge-Ring:** High density in the outer 4 strips.
+    - **Center:** High density in the center block (Inner 5).
+    - **Loc:** High density in one specific block.
+
+    **Zone Mapping:**
+    - Zones 0-3: Top, Right, Bottom, Left edge strips (outer frame).
+    - Zones 4-12: 3x3 Grid covering the inner 80% of the wafer.
+
     Args:
-        img (np.ndarray): 64x64 wafer map.
+        img (np.ndarray): 64x64 binary or float wafer map.
 
     Returns:
-        List[float]: A list of 13 density values.
+        List[float]: A list of 13 density values (0.0 to 100.0).
     """
     rows, cols = img.shape
     
@@ -132,30 +146,39 @@ def find_regions(img: np.ndarray) -> List[float]:
     
     # Extract slices
     regions = [
-        img[r_edges[0]:r_edges[1], :],                      # Top Edge
-        img[:, c_edges[4]:c_edges[5]],                      # Right Edge
-        img[r_edges[4]:r_edges[5], :],                      # Bottom Edge
-        img[:, c_edges[0]:c_edges[1]],                      # Left Edge
-        img[r_edges[1]:r_edges[2], c_edges[1]:c_edges[2]],  # Inner 1
-        img[r_edges[1]:r_edges[2], c_edges[2]:c_edges[3]],  # Inner 2
-        img[r_edges[1]:r_edges[2], c_edges[3]:c_edges[4]],  # Inner 3
-        img[r_edges[2]:r_edges[3], c_edges[1]:c_edges[2]],  # Inner 4
-        img[r_edges[2]:r_edges[3], c_edges[2]:c_edges[3]],  # Inner 5
-        img[r_edges[2]:r_edges[3], c_edges[3]:c_edges[4]],  # Inner 6
-        img[r_edges[3]:r_edges[4], c_edges[1]:c_edges[2]],  # Inner 7
-        img[r_edges[3]:r_edges[4], c_edges[2]:c_edges[3]],  # Inner 8
-        img[r_edges[3]:r_edges[4], c_edges[3]:c_edges[4]]   # Inner 9
+        img[r_edges[0]:r_edges[1], :],                      # Top Edge (0)
+        img[:, c_edges[4]:c_edges[5]],                      # Right Edge (1)
+        img[r_edges[4]:r_edges[5], :],                      # Bottom Edge (2)
+        img[:, c_edges[0]:c_edges[1]],                      # Left Edge (3)
+        img[r_edges[1]:r_edges[2], c_edges[1]:c_edges[2]],  # Inner 1 (4)
+        img[r_edges[1]:r_edges[2], c_edges[2]:c_edges[3]],  # Inner 2 (5)
+        img[r_edges[1]:r_edges[2], c_edges[3]:c_edges[4]],  # Inner 3 (6)
+        img[r_edges[2]:r_edges[3], c_edges[1]:c_edges[2]],  # Inner 4 (7)
+        img[r_edges[2]:r_edges[3], c_edges[2]:c_edges[3]],  # Inner 5 (Center) (8)
+        img[r_edges[2]:r_edges[3], c_edges[3]:c_edges[4]],  # Inner 6 (9)
+        img[r_edges[3]:r_edges[4], c_edges[1]:c_edges[2]],  # Inner 7 (10)
+        img[r_edges[3]:r_edges[4], c_edges[2]:c_edges[3]],  # Inner 8 (11)
+        img[r_edges[3]:r_edges[4], c_edges[3]:c_edges[4]]   # Inner 9 (12)
     ]
     return [cal_den(r) for r in regions]
 
 
 def _safe_radon(img: np.ndarray, n_theta: int) -> np.ndarray:
     """
-    Computes the Radon transform (Sinogram).
+    Computes the Radon transform (Sinogram) of an image.
     
-    Why: Radon transform sums pixel intensities along straight lines.
-    It creates strong peaks for linear defects (Scratches), which are
-    hard to detect with simple density checks.
+    **Why Radon?**
+    The Radon transform sums pixel intensities along straight lines at various angles.
+    This creates strong peaks in the sinogram when the projection angle aligns with
+    a linear structure on the wafer. It is the single most effective technique for
+    detecting **'Scratch'** defects, which are defined by their linearity.
+
+    Args:
+        img (np.ndarray): 2D image array (Defects only, no background).
+        n_theta (int): Number of projection angles (0 to 180 degrees).
+
+    Returns:
+        np.ndarray: The sinogram (rows=image_height, cols=n_theta).
     """
     theta = np.linspace(0., 180., n_theta, endpoint=False)
     try:

@@ -94,9 +94,29 @@ def load_model_ready_data(path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray
 def generate_math_combinations(X: np.ndarray, feature_names: List[str]) -> Tuple[np.ndarray, List[str]]:
     """
     Generates new features using pairwise mathematical operations.
-    Operations: Sum (+), Difference (-), Ratio (/).
     
-    Complexity: O(N^2) where N is number of features.
+    For every pair of features (A, B), we calculate:
+    1.  **Sum:** A + B
+    2.  **Difference:** A - B
+    3.  **Ratio:** A / (B + epsilon)
+    
+    **Why do this?**
+    Simple linear models (like Logistic Regression) treat features independently. 
+    They cannot inherently see that the *difference* between 'Area' and 'Perimeter' 
+    might be the key predictor. Explicitly creating these combinations allows simpler 
+    models to capture complex relationships.
+
+    **Complexity:** O(N^2) where N is number of features.
+    For N=66, this generates ~2,145 pairs * 3 operations = ~6,435 new features.
+
+    Args:
+        X (np.ndarray): Input feature matrix of shape (n_samples, n_features).
+        feature_names (List[str]): List of column names corresponding to X.
+
+    Returns:
+        Tuple[np.ndarray, List[str]]:
+            - The new array of combined features.
+            - A list of names for the new features (e.g., 'density_MEAN_PLUS_geom_area').
     """
     n_features = X.shape[1]
     X_new = []
@@ -142,8 +162,24 @@ def safe_feature_expansion(
     feature_names: List[str]
 ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     """
-    Orchestrates the feature expansion process.
-    Ensures that transformations learned on Train are applied identically to Test.
+    Orchestrates the feature expansion process (Math + Polynomials).
+    
+    **CRITICAL: Leakage Prevention**
+    PolynomialFeatures must be fit ONLY on the Training set. This learns the 
+    scaling statistics/feature names from the training data, which are then 
+    applied blindly to the Test set. If we fit on the Test set, we would be 
+    "cheating".
+
+    Args:
+        X_train (np.ndarray): Training data matrix.
+        X_test (np.ndarray): Testing data matrix.
+        feature_names (List[str]): Names of the input features.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, List[str]]:
+            - Expanded X_train.
+            - Expanded X_test.
+            - Full list of feature names.
     """
     print("\n" + "="*50)
     print(f"✨ STARTING FEATURE EXPANSION")

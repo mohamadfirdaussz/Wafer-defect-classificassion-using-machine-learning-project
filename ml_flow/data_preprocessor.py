@@ -82,12 +82,24 @@ def prepare_data_for_modeling(
 ) -> None:
     """
     Loads features, splits data, scales it, and applies hybrid balancing.
-    
+
+    **The Leak-Proof Logic:**
+    1.  **Split:** Data is split *strictly* before processing to ensure the test set
+        remains a true "unseen" simulation. Stratification ensures all defect types
+        are present in the test set.
+    2.  **Scale:** The Scaler is fit *only* on the Training data. This prevents "looking
+        ahead" at the test data distribution.
+    3.  **Balance:** Balancing (SMOTE) is applied *only* to the Training data. The Test
+        set must remain imbalanced to reflect the real-world deployment scenario.
+
     Args:
         feature_csv_path (str): Path to the input CSV from Stage 2.
         output_dir (str): Folder to save the resulting .npz and scaler.
         test_size (float): Proportion of dataset to include in the test split.
         seed (int): Random seed for reproducibility.
+
+    Returns:
+        None: Saves files to disk but returns nothing.
     """
     print("\n" + "="*50)
     print("🚀 STAGE 3: DATA PREPARATION & BALANCING")

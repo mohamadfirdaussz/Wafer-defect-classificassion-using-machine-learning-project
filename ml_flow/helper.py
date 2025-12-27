@@ -53,11 +53,15 @@ CONFIG = {
 # ───────────────────────────────────────────────
 def setup_logging(name: str, log_file: str = "pipeline.log") -> logging.Logger:
     """
-    Sets up a logger that writes to both console and a file.
+    Sets up a standardized logger that writes to both console and a file.
     
+    **Log Format:**
+    - File: `Timestamp - LoggerName - Level - Message`
+    - Console: `>> Message` (Simplified for readability)
+
     Args:
-        name (str): Name of the logger (usually __name__).
-        log_file (str): Filename for the log output.
+        name (str): Name of the logger (usually `__name__`).
+        log_file (str): Filename for the log output (e.g., 'pipeline.log').
 
     Returns:
         logging.Logger: Configured logger instance.
@@ -92,9 +96,18 @@ def execution_timer(task_name: str, logger: logging.Logger = None):
     """
     Context manager to measure execution time of a block of code.
     
+    Wraps code blocks to automatically print "Starting..." and "Finished in X seconds"
+    messages. Useful for profiling long-running ML stages.
+
     Usage:
+        ```python
         with execution_timer("Data Loading", logger):
             load_data()
+        ```
+
+    Args:
+        task_name (str): Human-readable name of the task.
+        logger (logging.Logger, optional): Logger to use. If None, prints to stdout.
     """
     start_time = time.time()
     if logger:
