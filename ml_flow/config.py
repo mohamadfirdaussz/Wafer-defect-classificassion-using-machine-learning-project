@@ -84,7 +84,16 @@ N_FOLDS = 3
 # 3️⃣ LOGGING CONFIGURATION
 # ───────────────────────────────────────────────
 
-def configure_logging(name):
+def configure_logging(name: str) -> logging.Logger:
+    """
+    Configures a simple console logger for immediate feedback.
+
+    Args:
+        name (str): The name of the logger to create.
+
+    Returns:
+        logging.Logger: The configured logger instance.
+    """
     logging.basicConfig(
         level=logging.INFO, 
         format="%(asctime)s [%(levelname)s] %(message)s",
