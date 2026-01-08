@@ -185,3 +185,4 @@ model_artifacts/
 *.joblib
 *.npz
 *.csv
+.gemini/
