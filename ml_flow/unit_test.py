@@ -34,8 +34,7 @@ required_modules = [
     "data_preprocessor",
     "feature_combination",
     "feature_selection",
-    "model_tuning",
-    "model_tuning_optimized"
+    "model_tuning"
 ]
 
 missing = []

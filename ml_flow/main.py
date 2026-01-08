@@ -39,16 +39,11 @@ transforms data for the next:
     -   **Action:** Reduces dimensionality via 3 parallel tracks (ANOVA -> RFE, Random Forest, Lasso).
     -   **Output:** 3 optimized datasets (`data_track_*.npz`).
 
-6.  **Stage 5: Model Tuning (`model_tuning.py`)**
-    -   **Input:** Optimized datasets.
+5.  **Stage 5: Model Training & Evaluation (`model_tuning.py`)**
+    -   **Input:** Optimized datasets from 3 feature selection tracks.
     -   **Action:** Trains 7 models (Logistic, SVM, XGBoost, etc.) per track using 3-fold CV. 
         Selects best hyperparameters and evaluates on the locked Test set.
-    -   **Output:** `master_model_comparison.csv` and model artifacts.
-
-7.  **Stage 6: Optimized Tuning (`model_tuning_optimized.py`)**
-    -   **Input:** Best track features.
-    -   **Action:** Applies advanced regularization (pruning, jitter) to fix overfitting.
-    -   **Output:** Final production-ready model.
+    -   **Output:** `master_model_comparison.csv`, trained models, and evaluation artifacts.
 
 ### 💻 USAGE
 Run this script from the project root:
@@ -111,14 +106,9 @@ PIPELINE_STAGES = [
         "desc": "Reducing features via ANOVA + RFE/Lasso/RF."
     },
     {
-        "name": "Stage 5: Model Tuning & Eval",     
+        "name": "Stage 5: Model Training & Evaluation",     
         "script": "model_tuning.py",
-        "desc": "Training 7 models, Tuning, and Final Test Evaluation."
-    },
-    {
-        "name": "Stage 6: Optimized Tuning (The Nuclear Option)",     
-        "script": "model_tuning_optimized.py",
-        "desc": "Advanced anti-overfitting: Data Pruning + Jitter + Calibration."
+        "desc": "Training 7 models per track, Tuning, and Final Test Evaluation."
     }
 ]
 
@@ -139,7 +129,7 @@ def log(message, level="INFO"):
     """Prints a timestamped log message."""
     timestamp = datetime.now().strftime("%H:%M:%S")
     ascii_icons = {"INFO": "[i]", "SUCCESS": "[+]", "ERROR": "[x]", "WARN": "[!]", "START": "[>]"}
-    icon = icons.get(level, "")
+    icon = ascii_icons.get(level, "")
     print(f"[{timestamp}] {icon}  {message}")
 
 def setup_environment():
