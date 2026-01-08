@@ -422,6 +422,14 @@ if __name__ == "__main__":
         # Display ALL results
         print(summary_df[cols].to_string(index=False))
         
+        # Identify Winner
+        best_row = summary_df.iloc[0]
+        print("\n" + "="*70)
+        print(f"🥇 BEST PERFORMANCE: {best_row['Track']} with {best_row['Model']}")
+        print(f"   F1-Macro: {best_row['Test_F1_Macro']:.4f}")
+        print(f"   Recall:   {best_row['Test_Recall_Macro']:.4f}")
+        print("="*70)
+        
         summary_path = os.path.join(save_dir, "master_model_comparison.csv")
         summary_df.to_csv(summary_path, index=False)
         print(f"\n💾 Full results saved to: {summary_path}")

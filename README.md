@@ -11,19 +11,20 @@
 
 ## 📋 Table of Contents
 
-- [Overview](#-overview)
-- [Key Features](#-key-features)
-- [Dataset](#-dataset)
-- [Quick Start](#-quick-start)
-- [Pipeline Architecture](#-pipeline-architecture)
-- [Project Structure](#-project-structure)
-- [How to Run](#-how-to-run)
-- [Technologies Used](#-technologies-used)
-- [Testing](#-testing)
+- [Overview](#overview)
+- [Research Objectives](#research-objectives)
+- [Key Features](#key-features)
+- [Dataset](#dataset)
+- [Quick Start](#quick-start)
+- [Pipeline Architecture](#pipeline-architecture)
+- [Project Structure](#project-structure)
+- [How to Run](#how-to-run)
+- [Technologies Used](#technologies-used)
+- [Testing](#testing)
 
 ---
 
-## 🎯 Overview
+## Overview
 
 This project implements a **scientifically rigorous, 5-stage machine learning pipeline** to classify defect patterns in semiconductor wafer maps using the **WM-811K dataset**. The pipeline is designed with a "Gatekeeper" architecture to ensure **zero data leakage** and features advanced techniques for handling **severe class imbalance** (~90% "none" class).
 
@@ -36,18 +37,32 @@ In semiconductor manufacturing, early defect detection is critical for:
 
 ---
 
-## ✨ Key Features
+---
 
-- **🛡️ Zero Data Leakage**: Test set is locked away before any preprocessing, ensuring honest evaluation
-- **⚖️ Hybrid Balancing**: Combines SMOTE (upsampling) for minorities and undersampling for majorities
-- **🔍 Multi-Track Feature Selection**: Three parallel approaches (RFE, RF Importance, Lasso) compete to find optimal features
-- **📊 High-Dimensional Feature Engineering**: Expands 66 base features to 8,500+ interaction terms
-- **🚀 One-Click Execution**: Automated batch script handles dependencies and runs entire pipeline
-- **🧪 Scientific Rigor**: 3-fold stratified cross-validation with locked test sets
+## Research Objectives
+
+This project addresses three primary research objectives:
+
+1. **Optimal Feature Set Identification**: To identify the optimal feature set for each machine learning algorithm by evaluating different feature combinations through multi-track feature selection (RFE, Random Forest Importance, and Lasso regularization).
+
+2. **Algorithm Performance Comparison**: To compare the performance of various traditional machine learning algorithms (SVM, Decision Tree, Random Forest, KNN, Logistic Regression, Gradient Boosting, and XGBoost) for wafer defect classification using consistent evaluation metrics.
+
+3. **Model Generalizability Assessment**: To assess the generalizability of the trained models by testing their performance on a combined dataset composed of multiple individual defect datasets, ensuring robust real-world applicability.
 
 ---
 
-## 📊 Dataset
+## Key Features
+
+- **Zero Data Leakage**: Test set is locked away before any preprocessing, ensuring honest evaluation
+- **Hybrid Class Balancing**: Combines SMOTE (upsampling) for minorities and undersampling for majorities
+- **Multi-Track Feature Selection**: Three parallel approaches (RFE, RF Importance, Lasso) compete to find optimal features
+- **High-Dimensional Feature Engineering**: Expands 66 base features to 8,500+ interaction terms
+- **One-Click Execution**: Automated batch script handles dependencies and runs entire pipeline
+- **Scientific Rigor**: 3-fold stratified cross-validation with locked test sets
+
+---
+
+## Dataset
 
 **WM-811K Wafer Map Dataset**
 - **Source**: [Kaggle Dataset](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map)
@@ -58,7 +73,7 @@ In semiconductor manufacturing, early defect detection is critical for:
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.8 or higher
@@ -93,19 +108,19 @@ In semiconductor manufacturing, early defect detection is critical for:
 
 ---
 
-## 📈 Pipeline Architecture
+## Pipeline Architecture
 
 The pipeline follows a strict sequential flow with 5 stages:
 
 ```mermaid
 graph TB
-    A[📥 Raw Data: LSWMD.pkl] --> B[🧹 Stage 1: Data Cleaning & Denoising]
-    B --> C[🔧 Stage 2: Feature Engineering]
-    C --> D[🛡️ Stage 3: Preprocessing & Balancing]
-    D --> E[🧬 Stage 3.5: Feature Expansion]
-    E --> F[🔍 Stage 4: Feature Selection]
-    F --> G[🤖 Stage 5: Model Training & Evaluation]
-    G --> H[✅ Final Model & Results]
+    A[Raw Data: LSWMD.pkl] --> B[Stage 1: Data Cleaning & Denoising]
+    B --> C[Stage 2: Feature Engineering]
+    C --> D[Stage 3: Preprocessing & Balancing]
+    D --> E[Stage 3.5: Feature Expansion]
+    E --> F[Stage 4: Feature Selection]
+    F --> G[Stage 5: Model Training & Evaluation]
+    G --> H[Final Model & Results]
 ```
 
 ### Stage Overview
@@ -121,17 +136,17 @@ graph TB
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```plaintext
 Wafer-defect-classificassion-using-machine-learning-project/
 │
-├── 📁 datasets/                          # 🔴 Place LSWMD.pkl here
+├── datasets/                             # Place LSWMD.pkl here
 │   └── LSWMD.pkl                         # WM-811K dataset (download required)
 │
-├── 📁 ml_flow/                           # 🧠 Core Pipeline Scripts
+├── ml_flow/                              # Core Pipeline Scripts
 │   ├── config.py                         # Centralized configuration
-│   ├── main.py                           # 🚀 Master pipeline controller
+│   ├── main.py                           # Master pipeline controller
 │   ├── data_loader.py                    # Stage 1: Data cleaning
 │   ├── feature_engineering.py            # Stage 2: Feature extraction
 │   ├── data_preprocessor.py              # Stage 3: Preprocessing & balancing
@@ -140,26 +155,26 @@ Wafer-defect-classificassion-using-machine-learning-project/
 │   ├── model_tuning.py                   # Stage 5: Model training
 │   └── unit_test.py                      # Unit test suite
 │
-├── 📁 dashboard/                         # 📊 Interactive Web Dashboard
+├── dashboard/                            # Interactive Web Dashboard
 │   ├── dashboard_server.py               # Flask backend
 │   └── index.html                        # Frontend UI
 │
-├── 📁 data_loader_results/               # Stage 1 output
-├── 📁 Feature_engineering_results/       # Stage 2 output
-├── 📁 preprocessing_results/             # Stage 3 output
-├── 📁 feature_selection_results/         # Stage 4 output
-├── 📁 model_artifacts/                   # Stage 5 output (models + metrics)
+├── data_loader_results/                  # Stage 1 output
+├── Feature_engineering_results/          # Stage 2 output
+├── preprocessing_results/                # Stage 3 output
+├── feature_selection_results/            # Stage 4 output
+├── model_artifacts/                      # Stage 5 output (models + metrics)
 │
-├── 📜 run_pipeline.bat                   # One-click Windows launcher
-├── 📜 requirement.txt                    # Python dependencies
-└── 📜 README.md                          # This file
+├── run_pipeline.bat                      # One-click Windows launcher
+├── requirement.txt                       # Python dependencies
+└── README.md                             # This file
 ```
 
 ---
 
-## 💻 How to Run
+## How to Run
 
-### Option 1: One-Click Execution (Windows) ⚡
+### Option 1: One-Click Execution (Windows)
 
 Simply double-click:
 ```
@@ -214,7 +229,7 @@ After completion, you'll find results in:
 
 ---
 
-## 🔧 Technologies Used
+## Technologies Used
 
 ### Core ML Libraries
 - **NumPy** & **Pandas**: Data manipulation
@@ -234,7 +249,7 @@ After completion, you'll find results in:
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Run Unit Tests
 
@@ -261,7 +276,7 @@ OK
 
 ---
 
-## 🎨 Interactive Dashboard (Optional)
+## Interactive Dashboard (Optional)
 
 ### Launch Dashboard
 ```bash
@@ -272,14 +287,14 @@ python dashboard_server.py
 Then open browser to: `http://localhost:5000`
 
 **Features**:
-- 📊 Performance metrics visualization
-- 🖼️ Upload wafer map for real-time classification
-- 📈 Feature importance charts
-- 🔍 Confusion matrix exploration
+- Performance metrics visualization
+- Upload wafer map for real-time classification
+- Feature importance charts
+- Confusion matrix exploration
 
 ---
 
-## 📝 Results & Metrics
+## Results & Metrics
 
 The pipeline evaluates models using:
 - **F1-Macro Score**: Unweighted average across all classes (emphasizes minorities)
@@ -291,7 +306,7 @@ Final results saved in `model_artifacts/master_model_comparison.csv`
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please:
 1. Fork the repository
@@ -301,13 +316,13 @@ Contributions are welcome! Please:
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License.
 
 ---
 
-## 👨‍💻 Author
+## Author
 
 **Mohamad Firdaus**
 - GitHub: [@mohamadfirdaussz](https://github.com/mohamadfirdaussz)
@@ -315,7 +330,7 @@ This project is licensed under the MIT License.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **WM-811K Dataset**: Created by MIR Lab, Taiwan
 - **Kaggle Community**: For hosting the dataset
@@ -325,8 +340,8 @@ This project is licensed under the MIT License.
 
 <div align="center">
 
-**⭐ Star this repo if you find it helpful! ⭐**
+**Star this repository if you find it helpful!**
 
-*Made with ❤️ for the semiconductor manufacturing community*
+*Made for the semiconductor manufacturing community*
 
 </div>
