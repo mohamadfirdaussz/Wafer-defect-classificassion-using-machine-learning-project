@@ -76,7 +76,9 @@ This project addresses three primary research objectives:
 ## Quick Start
 
 ### Prerequisites
-- Python 3.8 or higher
+### Prerequisites
+- **Python 3.9+** (Required for recent scikit-learn versions)
+- **scikit-learn 1.7.2+** (Crucial for SAGA solver support and compatibility with imblearn 0.14.1)
 - 8GB+ RAM recommended
 - Dataset: `LSWMD.pkl` from Kaggle
 
@@ -100,17 +102,12 @@ This project addresses three primary research objectives:
    pip install -r requirement.txt
    ```
 
-4. **Download dataset**:
-   - Visit [Kaggle WM-811K Dataset](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map)
-   - Download `LSWMD.pkl`
-   - Create `datasets/` folder in project root
-   - Place `LSWMD.pkl` in `datasets/` folder
-
-5. **Configure Dataset Path** (IMPORTANT):
-   - Open `ml_flow/config.py`.
-   - Locate the `RAW_DATA_PATH` variable.
-   - Update the path to point to your local `LSWMD.pkl` file.
-   - *Example*: `RAW_DATA_PATH = PROJECT_ROOT / "datasets" / "LSWMD.pkl"`
+4. **Prepare Dataset**:
+   - Download `LSWMD.pkl` from [Kaggle](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map)
+   - Create a `datasets/` folder in the project root
+   - Place `LSWMD.pkl` inside: `Wafer-defect-.../datasets/LSWMD.pkl`
+   
+   > **Note**: The project is configured to automatically detect the dataset in this folder. No code changes needed!
 
 ---
 

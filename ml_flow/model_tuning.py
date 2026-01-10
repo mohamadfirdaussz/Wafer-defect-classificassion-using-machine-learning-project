@@ -305,7 +305,7 @@ def get_models_and_grids() -> Tuple[Dict, Dict]:
     """
     # 1. Define 7 Models
     models = {
-        'LogisticReg': LogisticRegression(solver='liblinear', multi_class='ovr', max_iter=1000, random_state=42),
+        'LogisticReg': LogisticRegression(solver='saga', max_iter=1000, random_state=42),
         'KNN': KNeighborsClassifier(n_jobs=1),
         'DecisionTree': DecisionTreeClassifier(random_state=42),
         'RandomForest': RandomForestClassifier(random_state=42, n_jobs=1),

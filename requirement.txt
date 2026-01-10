@@ -16,11 +16,11 @@ scikit-image==0.25.2
 
 # --- Machine Learning & Preprocessing (Stage 3, 4, 5) ---
 # Used for Scaling, Splitting, Lasso, SVM, RF, GBM
-scikit-learn==1.5.2
+scikit-learn==1.7.2
 
 # --- Handling Class Imbalance (Stage 3) ---
 # Used for SMOTE
-imbalanced-learn==0.14.0
+imbalanced-learn==0.14.1
 
 # --- Advanced Boosting Algorithms (Stage 5) ---
 # The winning model library
