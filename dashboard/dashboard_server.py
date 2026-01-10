@@ -37,29 +37,60 @@ CORS(app)
 
 # ============ LOAD ASSETS ============
 print("Loading model and preprocessing assets...")
-BEST_MODEL_PATH = os.path.join(MODEL_ARTIFACTS_DIR, "best_model_optimized.joblib")
-SCALER_PATH = os.path.join(PREPROCESSING_DIR, "standard_scaler.joblib")
-DATA_4B_PATH = os.path.join(FEATURE_SELECTION_DIR, "data_track_4B_RFE.npz")
-FEATURE_IMPORTANCE_PATH = os.path.join(FEATURE_SELECTION_DIR, "RF_Feature_Importance_Ranking.csv")
+try:
+    METRICS_CSV_PATH = os.path.join(MODEL_ARTIFACTS_DIR, "master_model_comparison.csv")
+    SCALER_PATH = os.path.join(PREPROCESSING_DIR, "standard_scaler.joblib")
 
-if not os.path.exists(BEST_MODEL_PATH):
-    print(f"Model not found at {BEST_MODEL_PATH}")
+    if not os.path.exists(METRICS_CSV_PATH):
+        raise FileNotFoundError(f"Metrics file not found at {METRICS_CSV_PATH}. Please run pipeline Stage 5.")
+
+    # 1. Identify Best Model from Leaderboard
+    df_results = pd.read_csv(METRICS_CSV_PATH)
+    if df_results.empty:
+        raise ValueError("metrics CSV is empty")
+        
+    best_row = df_results.sort_values(by='Test_F1_Macro', ascending=False).iloc[0]
+    best_track = best_row['Track']
+    best_model_name = best_row['Model']
+
+    print(f"🏆 Selected Best Model for Dashboard: {best_model_name} (Track: {best_track})")
+
+    # 2. Construct Paths Dynamicallly
+    BEST_MODEL_PATH = os.path.join(MODEL_ARTIFACTS_DIR, best_track, best_model_name, "model.joblib")
+    FEATURE_TRACK_FILE = f"data_track_{best_track}.npz"
+    TRACK_DATA_PATH = os.path.join(FEATURE_SELECTION_DIR, FEATURE_TRACK_FILE)
+    FEATURE_IMPORTANCE_PATH = os.path.join(FEATURE_SELECTION_DIR, "RF_Feature_Importance_Ranking.csv") # Fallback
+
+    if not os.path.exists(BEST_MODEL_PATH):
+        raise FileNotFoundError(f"Model file not found at {BEST_MODEL_PATH}")
+
+    model = joblib.load(BEST_MODEL_PATH)
+    scaler = joblib.load(SCALER_PATH)
+
+    # 3. Load Corresponding Feature Track Data
+    print(f"Loading feature data from: {FEATURE_TRACK_FILE}")
+    if not os.path.exists(TRACK_DATA_PATH):
+         raise FileNotFoundError(f"Track data not found at {TRACK_DATA_PATH}")
+         
+    track_data = np.load(TRACK_DATA_PATH, allow_pickle=True)
+    selected_feature_names = track_data['feature_names'].tolist()
+
+    # Load cleaned data for random samples
+    data_raw = np.load(CLEANED_DATA_FILE, allow_pickle=True)
+    wafer_maps = data_raw['waferMap']
+    labels_gt = data_raw['labels']
+
+    # Load track data for computing confusion matrix
+    X_test_loaded = track_data['X_test']
+    y_test_loaded = track_data['y_test']
+    y_train_loaded = track_data['y_train']
+
+except Exception as e:
+    print("\n" + "!"*50)
+    print("❌ CRITICAL ERROR STARTING DASHBOARD")
+    print(f"Error details: {str(e)}")
+    print("!"*50 + "\n")
     sys.exit(1)
-
-model = joblib.load(BEST_MODEL_PATH)
-scaler = joblib.load(SCALER_PATH)
-data_4b = np.load(DATA_4B_PATH, allow_pickle=True)
-selected_feature_names = data_4b['feature_names'].tolist()
-
-# Load cleaned data for random samples
-data_raw = np.load(CLEANED_DATA_FILE, allow_pickle=True)
-wafer_maps = data_raw['waferMap']
-labels_gt = data_raw['labels']
-
-# Load track data for computing confusion matrix
-X_test_4b = data_4b['X_test']
-y_test_4b = data_4b['y_test']
-y_train_4b = data_4b['y_train']
 
 MAPPING_TYPE = {
     0: "Center", 1: "Donut", 2: "Edge-Loc", 3: "Edge-Ring",
@@ -94,9 +125,9 @@ def expand_for_inference(X_scaled_base):
 
 # Precompute confusion matrix on test set
 print("Computing confusion matrix...")
-y_pred_test = model.predict(X_test_4b)
-conf_matrix = confusion_matrix(y_test_4b, y_pred_test)
-class_report = classification_report(y_test_4b, y_pred_test, target_names=CLASS_NAMES, output_dict=True)
+y_pred_test = model.predict(X_test_loaded)
+conf_matrix = confusion_matrix(y_test_loaded, y_pred_test)
+class_report = classification_report(y_test_loaded, y_pred_test, target_names=CLASS_NAMES, output_dict=True)
 
 # ============ STATIC FILE SERVING ============
 
@@ -114,8 +145,8 @@ def serve_static(path):
 def get_dataset_stats():
     """Return dataset statistics"""
     total_samples = len(labels_gt)
-    train_size = len(y_train_4b)
-    test_size = len(y_test_4b)
+    train_size = len(y_train_loaded)
+    test_size = len(y_test_loaded)
     
     class_counts = Counter(labels_gt)
     class_distribution = [{"class": MAPPING_TYPE[i], "count": int(class_counts.get(i, 0))} for i in range(8)]
@@ -220,7 +251,7 @@ def get_misclassifications():
     limit = request.args.get('limit', 10, type=int)
     
     # Find misclassified indices in test set
-    misclassified_mask = y_pred_test != y_test_4b
+    misclassified_mask = y_pred_test != y_test_loaded
     misclassified_indices = np.where(misclassified_mask)[0]
     
     # Sample some examples
@@ -234,7 +265,7 @@ def get_misclassifications():
     for idx in sample_indices:
         examples.append({
             'index': int(idx),
-            'true_label': MAPPING_TYPE[int(y_test_4b[idx])],
+            'true_label': MAPPING_TYPE[int(y_test_loaded[idx])],
             'predicted_label': MAPPING_TYPE[int(y_pred_test[idx])]
         })
     
