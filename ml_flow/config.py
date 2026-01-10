@@ -22,10 +22,21 @@ BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 
 # Input Data Path
-# NOTE: Update this path if your dataset is in a different location.
-# Currently pointing to the user's external OneDrive folder as per original code.
-# Ideally, move 'LSWMD.pkl' to PROJECT_ROOT/datasets/ for portability.
-RAW_DATA_PATH = r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\datasets\LSWMD.pkl"
+# LOGIC: Check project "datasets" folder first for portability.
+# If not found, fall back to the original hardcoded path (for backward compatibility).
+RELATIVE_DATA_PATH = PROJECT_ROOT / "datasets" / "LSWMD.pkl"
+HARDCODED_DATA_PATH = Path(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\datasets\LSWMD.pkl")
+
+if RELATIVE_DATA_PATH.exists():
+    RAW_DATA_PATH = RELATIVE_DATA_PATH
+    print(f"✅ Found dataset locally: {RAW_DATA_PATH}")
+elif HARDCODED_DATA_PATH.exists():
+    RAW_DATA_PATH = HARDCODED_DATA_PATH
+    print(f"⚠️ Using hardcoded path: {RAW_DATA_PATH}")
+else:
+    # Final fallback: Look in current directory or prompt user
+    RAW_DATA_PATH = PROJECT_ROOT / "LSWMD.pkl"
+    print(f"⚠️ Dataset not found in standard locations. Defaulting to: {RAW_DATA_PATH}")
 
 # Output Directories (Relative to Project Root for better organization)
 # Or keep them in OneDrive if strictly required, but here we default to relative

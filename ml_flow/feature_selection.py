@@ -185,17 +185,27 @@ def run_feature_selection(input_file_path: str, output_dir: str):
     rfe = RFE(model_rfe, n_features_to_select=N_FEATURES_RFE, step=50, verbose=1)
     
     print("   Running RFE (this may take a moment)...")
-    rfe.fit(X_train_filtered, y_train)
-    
-    # Extract survivors
-    rfe_names = filtered_feature_names[rfe.support_]
-    
-    # Map back to original X_train
-    final_mask = np.isin(feature_names, rfe_names)
-    X_train_4B = X_train[:, final_mask]
-    X_test_4B = X_test[:, final_mask]
-    
-    save_track_data(output_dir, "4B_RFE", X_train_4B, X_test_4B, y_train, y_test, rfe_names)
+    print("   Running RFE (this may take a moment)...")
+    try:
+        rfe.fit(X_train_filtered, y_train)
+        
+        # Extract survivors
+        rfe_names = filtered_feature_names[rfe.support_]
+        
+        # Map back to original X_train
+        final_mask = np.isin(feature_names, rfe_names)
+        X_train_4B = X_train[:, final_mask]
+        X_test_4B = X_test[:, final_mask]
+        
+        save_track_data(output_dir, "4B_RFE", X_train_4B, X_test_4B, y_train, y_test, rfe_names)
+
+    except Exception as e:
+        print(f"\n❌ CRITICAL ERROR in Track 4B (RFE): {e}")
+        print("   Tips for debugging:")
+        print("   - MemoryError: Reduce N_PREFILTER (currently {N_PREFILTER}) or check system RAM.")
+        print("   - ValueError: Check for NaNs or infinite values in input data.")
+        print("   - RuntimeWarning: Convergence issues. Increase max_iter in LogisticRegression.")
+        print("   ⚠️ Skipping Track 4B and continuing...\n")
 
     # ──────────────────────────────────────────────────────────────────────────
     # 🌲 TRACK 4C: EMBEDDED METHOD (Random Forest)
