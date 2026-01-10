@@ -6,48 +6,48 @@
 #
 
 # --- Core Data Science ---
-numpy
-pandas
-scipy
+numpy==1.26.4
+pandas==2.3.3
+scipy==1.15.3
 
 # --- Image Processing (Stage 1 & 2) ---
 # Used for Median Filter and Radon Transform
-scikit-image
+scikit-image==0.25.2
 
 # --- Machine Learning & Preprocessing (Stage 3, 4, 5) ---
 # Used for Scaling, Splitting, Lasso, SVM, RF, GBM
-scikit-learn
+scikit-learn==1.5.2
 
 # --- Handling Class Imbalance (Stage 3) ---
 # Used for SMOTE
-imbalanced-learn
+imbalanced-learn==0.14.0
 
 # --- Advanced Boosting Algorithms (Stage 5) ---
 # The winning model library
-xgboost
+xgboost==3.1.1
 
 # --- Visualization (Stage 5 Results) ---
 # Used for Confusion Matrices
-matplotlib
-seaborn
+matplotlib==3.10.7
+seaborn==0.13.2
 
 # --- Utilities & Performance ---
 # Used for Progress Bars
-tqdm
+tqdm==4.67.1
 # Used for Parallel Processing (saving/loading models)
-joblib
+joblib==1.5.2
 
 # --- Optional / Interactive ---
-ipython
-jupyter
+ipython==8.37.0
+jupyter==1.1.1
 
 # --- Enhanced Pipeline Dependencies ---
 # Bayesian hyperparameter optimization (Stage 5+)
-optuna
+optuna==4.6.0
 
 # LightGBM for ensemble meta-learner
-lightgbm
+lightgbm==4.6.0
 
 # Plotly for Optuna visualizations
-plotly
-kaleido
+plotly==6.5.0
+kaleido==1.2.0
