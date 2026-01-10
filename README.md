@@ -106,6 +106,12 @@ This project addresses three primary research objectives:
    - Create `datasets/` folder in project root
    - Place `LSWMD.pkl` in `datasets/` folder
 
+5. **Configure Dataset Path** (IMPORTANT):
+   - Open `ml_flow/config.py`.
+   - Locate the `RAW_DATA_PATH` variable.
+   - Update the path to point to your local `LSWMD.pkl` file.
+   - *Example*: `RAW_DATA_PATH = PROJECT_ROOT / "datasets" / "LSWMD.pkl"`
+
 ---
 
 ## Pipeline Architecture
