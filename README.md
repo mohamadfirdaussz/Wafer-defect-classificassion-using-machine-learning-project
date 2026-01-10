@@ -316,17 +316,11 @@ Contributions are welcome! Please:
 
 ---
 
-## License
-
-This project is licensed under the MIT License.
-
----
-
 ## Author
 
 **Mohamad Firdaus**
 - GitHub: [@mohamadfirdaussz](https://github.com/mohamadfirdaussz)
-- Email: mohamadfirdaussz@gmail.com
+- Email: mohamad_firdaus_bs22@iluv.ums.edu.my
 
 ---
 
