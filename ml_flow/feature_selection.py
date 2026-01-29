@@ -185,7 +185,7 @@ def run_feature_selection(input_file_path: str, output_dir: str):
     rfe = RFE(model_rfe, n_features_to_select=N_FEATURES_RFE, step=50, verbose=1)
     
     print("   Running RFE (this may take a moment)...")
-    print("   Running RFE (this may take a moment)...")
+ 
     try:
         rfe.fit(X_train_filtered, y_train)
         
@@ -244,7 +244,7 @@ def run_feature_selection(input_file_path: str, output_dir: str):
     
     # C=0.005 is a strong penalty (Smaller C = More features removed).
     l1_model = LogisticRegression(
-        penalty='l1', solver='saga', C=0.005, random_state=42, max_iter=2000
+        penalty='l1', solver='saga', C=0.5, random_state=42, max_iter=2000
     )
     
     l1_model.fit(X_train_filtered, y_train)
