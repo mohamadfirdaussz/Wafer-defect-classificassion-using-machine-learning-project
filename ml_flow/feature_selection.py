@@ -181,7 +181,7 @@ def run_feature_selection(input_file_path: str, output_dir: str):
     
     # We use Logistic Regression as the 'estimator' because it is linear and fast.
     # step=50: Drops 50 weakest features per iteration (speeds up process).
-    model_rfe = LogisticRegression(solver='saga', random_state=42, max_iter=1000)
+    model_rfe = LogisticRegression(solver='liblinear', random_state=42, max_iter=1000)
     rfe = RFE(model_rfe, n_features_to_select=N_FEATURES_RFE, step=50, verbose=1)
     
     print("   Running RFE (this may take a moment)...")
@@ -244,7 +244,7 @@ def run_feature_selection(input_file_path: str, output_dir: str):
     
     # C=0.005 is a strong penalty (Smaller C = More features removed).
     l1_model = LogisticRegression(
-        penalty='l1', solver='saga', C=0.5, random_state=42, max_iter=2000
+        penalty='l1', solver='liblinear', C=0.5, random_state=42, max_iter=2000
     )
     
     l1_model.fit(X_train_filtered, y_train)

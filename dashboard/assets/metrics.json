@@ -1,9 +1,0 @@
-{
-  "prediction": "Donut",
-  "probabilities": [
-    {"label": "Donut", "score": 0.92},
-    {"label": "Loc", "score": 0.05},
-    {"label": "Center", "score": 0.03}
-
-  ]
-}
