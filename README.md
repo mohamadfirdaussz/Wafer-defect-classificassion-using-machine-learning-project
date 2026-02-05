@@ -75,14 +75,31 @@ This project addresses three primary research objectives:
 
 ## Quick Start
 
-### Prerequisites
-### Prerequisites
-- **Python 3.9+** (Required for recent scikit-learn versions)
-- **scikit-learn 1.7.2+** (Crucial for SAGA solver support and compatibility with imblearn 0.14.1)
-- 8GB+ RAM recommended
-- Dataset: `LSWMD.pkl` from Kaggle
+### For New Users - One-Click Setup! 🚀
 
-### Installation
+**Windows:**
+1. Double-click `setup.bat` to install everything automatically
+2. Download dataset from [Kaggle](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map) (if not included)
+3. Place `LSWMD.pkl` in `datasets/` folder
+4. Double-click `run_pipeline.bat` to run!
+
+**Linux/macOS:**
+1. Run `python setup.py` to install everything
+2. Download dataset from [Kaggle](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map) (if not included)
+3. Place `LSWMD.pkl` in `datasets/` folder
+4. Run `python ml_flow/main.py`
+
+> ✨ **See [QUICK_START.md](QUICK_START.md) for detailed step-by-step instructions and troubleshooting**
+
+### Prerequisites
+- **Python 3.9+** (Required for scikit-learn 1.7.2+)
+- **8GB+ RAM** recommended
+- **5GB+ disk space** for dataset and results
+
+### Manual Installation (Advanced Users)
+
+<details>
+<summary>Click to expand manual installation steps</summary>
 
 1. **Clone the repository**:
    ```bash
@@ -90,7 +107,7 @@ This project addresses three primary research objectives:
    cd Wafer-defect-classificassion-using-machine-learning-project
    ```
 
-2. **Create virtual environment** (recommended):
+2. **Create virtual environment**:
    ```bash
    python -m venv .venv
    .venv\Scripts\activate  # Windows
@@ -105,9 +122,9 @@ This project addresses three primary research objectives:
 4. **Prepare Dataset**:
    - Download `LSWMD.pkl` from [Kaggle](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map)
    - Create a `datasets/` folder in the project root
-   - Place `LSWMD.pkl` inside: `Wafer-defect-.../datasets/LSWMD.pkl`
-   
-   > **Note**: The project is configured to automatically detect the dataset in this folder. No code changes needed!
+   - Place `LSWMD.pkl` inside: `datasets/LSWMD.pkl`
+
+</details>
 
 ---
 
@@ -168,36 +185,67 @@ Wafer-defect-classificassion-using-machine-learning-project/
 ├── feature_selection_results/            # Stage 4 output
 ├── model_artifacts/                      # Stage 5 output (models + metrics)
 │
-├── run_pipeline.bat                      # One-click Windows launcher
+├── setup.bat                             # 🆕 One-click setup (Windows)
+├── setup.py                              # 🆕 Cross-platform setup script
+├── run_pipeline.bat                      # 🆕 Enhanced pipeline launcher
+├── create_distribution.bat               # 🆕 Create distribution package (Windows)
+├── create_distribution.py                # 🆕 Create distribution package (Cross-platform)
+├── QUICK_START.md                        # 🆕 Quick start guide
 ├── requirement.txt                       # Python dependencies
 └── README.md                             # This file
 ```
 
 ---
 
+
 ## How to Run
 
-### Option 1: One-Click Execution (Windows)
+### Option 1: One-Click Execution ⚡ (Windows - Recommended)
 
-Simply double-click:
+**First Time Setup:**
 ```
-run_pipeline.bat
+Double-click: setup.bat
 ```
 
-The batch script will automatically:
-1. ✅ Verify Python installation
-2. ✅ Install all dependencies from `requirement.txt`
-3. ✅ Execute all 5 pipeline stages sequentially
-4. ✅ Generate results in organized output directories
+**Run Pipeline:**
+```
+Double-click: run_pipeline.bat
+```
 
-### Option 2: Manual Execution (All Platforms)
+The scripts will automatically:
+1. ✅ Verify Python installation and version (3.9+)
+2. ✅ Create and activate virtual environment
+3. ✅ Install all dependencies from `requirement.txt`
+4. ✅ Execute all 5 pipeline stages sequentially
+5. ✅ Generate results in organized output directories
+6. ✅ Display results summary and locations
 
-Run the master controller:
+### Option 2: Cross-Platform Execution (Linux/macOS/Windows)
+
+**Setup:**
+```bash
+python setup.py
+```
+
+**Run Pipeline:**
 ```bash
 python ml_flow/main.py
 ```
 
-### Option 3: Run Individual Stages (For Debugging)
+### Option 3: Manual Execution (All Platforms)
+
+Run the master controller:
+```bash
+# Activate virtual environment first
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Linux/Mac
+
+# Run pipeline
+python ml_flow/main.py
+```
+
+### Option 4: Run Individual Stages (For Debugging)
+
 
 ```bash
 cd ml_flow
@@ -229,6 +277,30 @@ After completion, you'll find results in:
 - `preprocessing_results/` - Preprocessed data
 - `feature_selection_results/` - Selected features (3 tracks)
 - `model_artifacts/` - **Master leaderboard** (`master_model_comparison.csv`), trained models, confusion matrices, ROC curves
+
+---
+
+## 📦 Creating Distribution Package
+
+Want to share this project with others? Create a complete package:
+
+**Windows:**
+```
+Double-click: create_distribution.bat
+```
+
+**Cross-Platform:**
+```bash
+python create_distribution.py
+```
+
+This creates a ZIP file containing:
+- All source code
+- Setup scripts
+- Dataset (if present in your project)
+- Documentation
+
+Recipients can simply extract and run `setup.bat` for instant deployment!
 
 ---
 
