@@ -1,0 +1,140 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "🔧 Setup Environment (One-Click)",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\setup.bat"
+            },
+            "linux": {
+                "command": "python ${workspaceFolder}/setup.py"
+            },
+            "osx": {
+                "command": "python ${workspaceFolder}/setup.py"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "label": "▶️ Run Pipeline (One-Click)",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\run_pipeline.bat"
+            },
+            "linux": {
+                "command": "source ${workspaceFolder}/.venv/bin/activate && python ${workspaceFolder}/ml_flow/main.py"
+            },
+            "osx": {
+                "command": "source ${workspaceFolder}/.venv/bin/activate && python ${workspaceFolder}/ml_flow/main.py"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "📦 Create Distribution Package",
+            "type": "shell",
+            "windows": {
+                "command": "${workspaceFolder}\\create_distribution.bat"
+            },
+            "linux": {
+                "command": "python ${workspaceFolder}/create_distribution.py"
+            },
+            "osx": {
+                "command": "python ${workspaceFolder}/create_distribution.py"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "label": "🧪 Run Unit Tests",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/Scripts/python",
+            "args": [
+                "${workspaceFolder}/ml_flow/unit_test.py"
+            ],
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "linux": {
+                "command": "${workspaceFolder}/.venv/bin/python"
+            },
+            "osx": {
+                "command": "${workspaceFolder}/.venv/bin/python"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "🌐 Run Dashboard",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/Scripts/python",
+            "args": [
+                "${workspaceFolder}/dashboard/dashboard_server.py"
+            ],
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "linux": {
+                "command": "${workspaceFolder}/.venv/bin/python"
+            },
+            "osx": {
+                "command": "${workspaceFolder}/.venv/bin/python"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "problemMatcher": [],
+            "isBackground": true
+        }
+    ]
+}
