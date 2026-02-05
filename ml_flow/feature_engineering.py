@@ -196,8 +196,13 @@ def cubic_inter_features(sinogram: np.ndarray, output_points: int) -> np.ndarray
     1. Calculate Mean and Std Dev profiles along the projection axis.
     2. Interpolate these profiles to a fixed length (output_points).
     """
+    # Existing check
     if sinogram.size == 0: 
         return np.zeros(output_points * 2)
+
+    # NEW: Check for zero variance (flat signal) to prevent interpolation errors
+    if np.max(sinogram) == np.min(sinogram):
+         return np.zeros(output_points * 2)
 
     mean_profile = np.mean(sinogram, axis=1)
     std_profile = np.std(sinogram, axis=1)

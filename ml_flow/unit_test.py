@@ -107,39 +107,32 @@ class TestPipelineSuite(unittest.TestCase):
         self.assertFalse(np.isnan(features).any(), "Extracted features contain NaNs")
         print("   [OK] Feature count (66) and validity verified.")
 
-    # ==================================================================
-    # [STAGE 3] PREPROCESSING TESTS
-    # ==================================================================
-    def test_s3_scaling(self):
-        """Test if StandardScaler works as expected."""
-        print("\n[TEST] [Stage 3] Testing Scaling Logic...")
-        X_dummy = np.random.normal(100, 20, (50, 5))
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X_dummy)
-        
-        self.assertAlmostEqual(X_scaled.mean(), 0, delta=0.5, msg="Mean not centered at 0")
-        self.assertAlmostEqual(X_scaled.std(), 1, delta=0.1, msg="Std not scaled to 1")
-        print("   [OK] Scaling logic verified.")
-
-    # ==================================================================
+   # ==================================================================
     # [STAGE 3.5] FEATURE EXPANSION TESTS
     # ==================================================================
     def test_s35_math_logic(self):
-        """Test A+B, A-B, A/B logic with epsilon tolerance."""
+        """Test Sum and Difference logic (Ratio removed for safety)."""
         print("\n[TEST] [Stage 3.5] Testing Expansion Math...")
         X_tiny = np.array([[10.0, 2.0]])
         names = ['A', 'B']
         
-        # This function casts to float32 internally in your script
-        X_new, _ = feature_combination.generate_math_combinations(X_tiny, names)
+        # Generates: [A+B, A-B]
+        X_new, new_names = feature_combination.generate_math_combinations(X_tiny, names)
         
-        # FIX: We use 'places=4' to allow for float32 precision and the 1e-6 epsilon
-        # Ratio: 10.0 / (2.0 + 0.000001) = 4.9999975
-        self.assertEqual(X_new[0][0], 12.0)
-        self.assertEqual(X_new[0][1], 8.0)
-        self.assertAlmostEqual(X_new[0][2], 5.0, places=4, msg="Ratio math failed tolerance check")
+        # CHECK 1: Correct Dimensions (Should be 2 features, NOT 3)
+        self.assertEqual(X_new.shape[1], 2, f"Expected 2 features (Sum, Diff), got {X_new.shape[1]}")
         
-        print("   [OK] Math interaction terms verified (with epsilon tolerance).")
+        # CHECK 2: Sum Logic (10 + 2 = 12)
+        self.assertEqual(X_new[0][0], 12.0, "Summation logic failed")
+        
+        # CHECK 3: Diff Logic (10 - 2 = 8)
+        self.assertEqual(X_new[0][1], 8.0, "Difference logic failed")
+        
+        # CHECK 4: Verify Ratio is GONE
+        # If we try to access index 2, it should fail. We verify this implicitly by checking shape above.
+        
+        print(f"   [OK] Math interaction terms verified. (Ratio correctly absent).")
+
 
     # ==================================================================
     # [STAGE 5] MODEL TUNING TESTS

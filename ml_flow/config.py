@@ -29,14 +29,14 @@ HARDCODED_DATA_PATH = Path(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\datasets\
 
 if RELATIVE_DATA_PATH.exists():
     RAW_DATA_PATH = RELATIVE_DATA_PATH
-    print(f"✅ Found dataset locally: {RAW_DATA_PATH}")
+    print(f"[OK] Found dataset locally: {RAW_DATA_PATH}")
 elif HARDCODED_DATA_PATH.exists():
     RAW_DATA_PATH = HARDCODED_DATA_PATH
-    print(f"⚠️ Using hardcoded path: {RAW_DATA_PATH}")
+    print(f"[WARNING] Using hardcoded path: {RAW_DATA_PATH}")
 else:
     # Final fallback: Look in current directory or prompt user
     RAW_DATA_PATH = PROJECT_ROOT / "LSWMD.pkl"
-    print(f"⚠️ Dataset not found in standard locations. Defaulting to: {RAW_DATA_PATH}")
+    print(f"[WARNING] Dataset not found in standard locations. Defaulting to: {RAW_DATA_PATH}")
 
 # Output Directories (Relative to Project Root for better organization)
 # Or keep them in OneDrive if strictly required, but here we default to relative

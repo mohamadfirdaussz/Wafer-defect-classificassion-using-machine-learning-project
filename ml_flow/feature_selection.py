@@ -244,7 +244,7 @@ def run_feature_selection(input_file_path: str, output_dir: str):
     
     # C=0.005 is a strong penalty (Smaller C = More features removed).
     l1_model = LogisticRegression(
-        penalty='l1', solver='liblinear', C=0.5, random_state=42, max_iter=2000
+        penalty='l1', solver='liblinear', C=0.005, random_state=42, max_iter=2000
     )
     
     l1_model.fit(X_train_filtered, y_train)

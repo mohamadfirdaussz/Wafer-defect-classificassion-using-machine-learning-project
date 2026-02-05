@@ -118,16 +118,26 @@ def generate_math_combinations(X: np.ndarray, feature_names: List[str]) -> Tuple
             - The new array of combined features.
             - A list of names for the new features (e.g., 'density_MEAN_PLUS_geom_area').
     """
+
+    """
+    Generates Sum and Difference features.
+    
+    ❌ REMOVED: Ratio (A/B)
+    Reason: Input X is Z-Scored (Standardized). Denominators cross 0, causing
+    mathematical explosion and physically meaningless features.
+    """
     n_features = X.shape[1]
-    X_new = []
+    
+    # Pre-allocate output array to prevent memory fragmentation
+    # Count pairs: n*(n-1)/2. Multiply by 2 operations (Sum, Diff)
+    n_pairs = (n_features * (n_features - 1)) // 2
+    n_new_features = n_pairs * 2
+    
+    X_new = np.zeros((X.shape[0], n_new_features), dtype=np.float32)
     names_new = []
     
-    # Cast to float32 to conserve memory during massive expansion
-    X = X.astype(np.float32)
-    epsilon = 1e-6  # Prevent division by zero
-
+    col_idx = 0
     # Iterate over unique pairs (i < j)
-    count = 0
     for i in range(n_features):
         for j in range(i + 1, n_features):
             f_i = X[:, i]
@@ -136,25 +146,17 @@ def generate_math_combinations(X: np.ndarray, feature_names: List[str]) -> Tuple
             name_j = feature_names[j]
 
             # 1. Sum
-            X_new.append(f_i + f_j)
+            X_new[:, col_idx] = f_i + f_j
             names_new.append(f'{name_i}_PLUS_{name_j}')
+            col_idx += 1
 
             # 2. Difference
-            X_new.append(f_i - f_j)
+            X_new[:, col_idx] = f_i - f_j
             names_new.append(f'{name_i}_MINUS_{name_j}')
+            col_idx += 1
             
-            # 3. Ratio
-            X_new.append(f_i / (f_j + epsilon))
-            names_new.append(f'{name_i}_DIV_{name_j}')
-            
-            count += 1
-
-    # Stack all new columns efficiently
-    X_combined_math = np.column_stack(X_new)
-    
-    print(f"   Math Ops: Generated {X_combined_math.shape[1]} features (from {count} pairs).")
-    return X_combined_math, names_new
-
+    print(f"   Math Ops: Generated {X_new.shape[1]} features (Sum/Diff).")
+    return X_new, names_new
 
 def safe_feature_expansion(
     X_train: np.ndarray, 
