@@ -186,3 +186,7 @@ model_artifacts/
 *.npz
 *.csv
 .gemini/
+
+# Large Data Files
+datasets/
+*.pkl
