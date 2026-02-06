@@ -35,7 +35,7 @@ REQUIREMENTS_FILES = [
     "requirements_clean.txt",
     "requirements_freeze.txt"
 ]
-PYTHON_MIN_VERSION = (3, 9)
+PYTHON_MIN_VERSION = (3, 10)  # scikit-learn 1.7.2 requires 3.10+
 PYTHON_MAX_VERSION = (3, 13)  # 3.13+ is not compatible
 
 # =============================================================================
