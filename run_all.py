@@ -36,6 +36,7 @@ REQUIREMENTS_FILES = [
     "requirements_freeze.txt"
 ]
 PYTHON_MIN_VERSION = (3, 9)
+PYTHON_MAX_VERSION = (3, 13)  # 3.13+ is not compatible
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -61,6 +62,11 @@ def check_python_version():
     if current < PYTHON_MIN_VERSION:
         log(f"Python {PYTHON_MIN_VERSION[0]}.{PYTHON_MIN_VERSION[1]}+ required. "
             f"Found: {current[0]}.{current[1]}", "ERROR")
+        sys.exit(1)
+    
+    if current >= PYTHON_MAX_VERSION:
+        log(f"Python {current[0]}.{current[1]} is not yet compatible with this pipeline.", "ERROR")
+        log(f"Please use Python {PYTHON_MIN_VERSION[0]}.{PYTHON_MIN_VERSION[1]} - 3.12", "ERROR")
         sys.exit(1)
     
     log(f"Python {current[0]}.{current[1]} detected", "OK")

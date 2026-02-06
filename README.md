@@ -92,7 +92,7 @@ This project addresses three primary research objectives:
 > ✨ **See [QUICK_START.md](QUICK_START.md) for detailed step-by-step instructions and troubleshooting**
 
 ### Prerequisites
-- **Python 3.9+** (Required for scikit-learn 1.7.2+)
+- **Python 3.9 - 3.12** (3.13 is currently not compatible with key dependencies)
 - **8GB+ RAM** recommended
 - **5GB+ disk space** for dataset and results
 
@@ -213,7 +213,7 @@ Double-click: run_pipeline.bat
 ```
 
 The scripts will automatically:
-1. ✅ Verify Python installation and version (3.9+)
+1. ✅ Verify Python installation and version (3.9 - 3.12)
 2. ✅ Create and activate virtual environment
 3. ✅ Install all dependencies from `requirement.txt`
 4. ✅ Execute all 5 pipeline stages sequentially
