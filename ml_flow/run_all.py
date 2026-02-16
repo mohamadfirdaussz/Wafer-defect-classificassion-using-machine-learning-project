@@ -195,7 +195,7 @@ def run_pipeline():
     print()
     
     venv_python = get_venv_python()
-    main_script = PROJECT_ROOT / "ml_flow" / "main.py"
+    main_script = PROJECT_ROOT / "main.py"
     
     if not main_script.exists():
         log(f"Pipeline script not found: {main_script}", "ERROR")
