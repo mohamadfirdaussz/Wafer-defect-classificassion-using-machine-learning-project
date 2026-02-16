@@ -9,6 +9,7 @@
 numpy==1.26.4
 pandas==2.3.3
 scipy==1.15.3
+pyarrow>=14.0.0
 
 # --- Image Processing (Stage 1 & 2) ---
 # Used for Median Filter and Radon Transform
