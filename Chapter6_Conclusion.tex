@@ -1,0 +1,34 @@
+\chapter{CONCLUSION AND FUTURE DIRECTION}
+\label{ch6}
+
+\section{Overview}
+
+This chapter concludes the study by summarizing the key findings, discussing their implications, and outlining directions for future research. It serves as a transition from the detailed methodological and experimental analyses presented in the previous chapters to a broader reflection on the significance and applicability of the proposed approach. The emphasis in this chapter shifts from the technical construction of the machine learning pipeline to its overall contribution to the problem of semiconductor wafer defect classification and its potential impact on industrial inspection systems.
+
+\section{Conclusion of the Study}
+
+The primary objective of this research was to develop a robust and scientifically rigorous machine learning pipeline for classifying defect patterns in semiconductor wafer maps, with particular emphasis on addressing severe class imbalance and high-dimensional feature spaces. To achieve this, a comprehensive five-stage pipeline was designed and implemented, incorporating a strict Gatekeeper architecture that isolated the test set prior to any preprocessing, feature engineering, or data augmentation. This design ensured zero data leakage and enabled a reliable assessment of real-world generalization performance.
+
+Experimental results demonstrate the effectiveness of the proposed methodology. A multi-track feature selection strategy, including Recursive Feature Elimination, Random Forest feature importance, and Lasso regularization, was employed to evaluate seven traditional machine learning algorithms under consistent experimental conditions. The results indicate that Lasso-based feature selection combined with Logistic Regression achieved the best overall balance between accuracy and class-wise performance, yielding a test Macro F1-score of 62.0% and a test accuracy of 84.4%. Notably, this configuration outperformed more complex ensemble-based models, such as Random Forest and Gradient Boosting, particularly in terms of generalization stability, as reflected by a substantially smaller overfitting gap.
+
+In addition, the adoption of a hybrid class balancing strategy, combining SMOTE-based oversampling for minority classes with undersampling of the majority class, proved to be a critical component of the pipeline. This approach effectively reduced bias toward the dominant none class and enhanced the detection of rare but operationally important defect types such as Donut and Scratch. Overall, the findings of this study demonstrate that, for high-dimensional and highly imbalanced wafer defect data, a disciplined approach emphasizing feature selection, regularization, and linear separability can outperform more complex non-linear models that are prone to overfitting.
+
+\section{Contributions of the Study}
+
+This study makes several important contributions to the fields of semiconductor manufacturing inspection and applied machine learning. First, it introduces a strictly enforced zero-leakage pipeline architecture, referred to as the Gatekeeper framework, which establishes a high standard of experimental rigor. By locking the test set before any form of data transformation, including scaling and augmentation, the pipeline ensures that reported performance metrics accurately reflect true deployment conditions, addressing a common weakness in prior studies.
+
+Second, the research demonstrates the effectiveness of extensive feature engineering and systematic feature selection for wafer defect classification. More than 6500 interaction features were generated from an initial set of 66 descriptors, and a comparative evaluation of wrapper, embedded, and regularization-based selection techniques was conducted. This analysis provides valuable insights into how different feature subsets contribute to discriminating specific defect morphologies and supports the conclusion that careful feature curation is central to model performance.
+
+Third, the study contributes a fully reproducible and modular end-to-end machine learning pipeline. Each stage, from data cleaning and balancing to model training and evaluation, is clearly separated and automated, enabling straightforward replication and extension. This design bridges the gap between academic experimentation and industrial deployment by facilitating integration with new datasets, feature extractors, or classification algorithms.
+
+Finally, the study provides a validated strategy for handling extreme class imbalance in semiconductor fabrication data. By demonstrating that rare defect classes can be meaningfully detected without sacrificing overall accuracy, even under a class imbalance ratio of approximately 9:1, the work offers a practical template for similar industrial inspection problems.
+
+\section{Future Work}
+
+While this study provides meaningful insights and a strong experimental foundation, several opportunities remain for further investigation. One important direction is the integration of deep learning approaches. The performance of traditional machine learning models appears to plateau at a Macro F1-score of approximately 0.62, suggesting that further gains may require architectures capable of learning spatial hierarchies directly from raw wafer maps. Future studies should therefore explore convolutional neural networks and residual network architectures to capture complex spatial and topological defect patterns that may not be fully represented by handcrafted features.
+
+Another promising avenue is the use of more advanced data augmentation techniques. Although SMOTE was effective in addressing class imbalance, it generates synthetic samples through linear interpolation and may not fully capture the variability of real defect patterns. Generative models, such as Generative Adversarial Networks, could be employed to produce more realistic synthetic wafer maps for minority classes, potentially improving robustness and generalization.
+
+From a deployment perspective, future work should also consider optimizing the pipeline for real-time inference. In a production environment, inspection systems often operate under strict latency constraints. Reducing inference time through further feature pruning, model compression, or conversion to optimized formats such as ONNX or TensorRT would be essential for practical implementation.
+
+Finally, future research could extend the current supervised framework by incorporating unsupervised or semi-supervised anomaly detection techniques. Given the dominance of clean wafers and the possibility of previously unseen defect types, methods such as Isolation Forests or autoencoder-based anomaly detectors could serve as an additional safety layer, enabling the system to flag novel or anomalous patterns that fall outside the predefined defect categories.

@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-📜 feature_combination.py (Stage 3.5: Feature Expansion)
-────────────────────────────────────────────────────────────────────────────────
+≡ƒô£ feature_combination.py (Stage 3.5: Feature Expansion)
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 WM-811K Feature Expansion & Interaction
 
-### 🎯 PURPOSE
+### ≡ƒÄ» PURPOSE
 This script performs **Feature Construction** (Track 4E). It takes the original 
 66 engineered features and mathematically combines them to create a high-dimensional 
 dataset (~6,500 features).
 
-### ⚙️ WHY DO THIS?
+### ΓÜÖ∩╕Å WHY DO THIS?
 Traditional features like 'Density' and 'Area' are isolated. However, a defect 
 might be best described by their interaction.
 
@@ -17,16 +17,16 @@ might be best described by their interaction.
   A simple linear model can't see "AND" relationships easily. 
   By creating a feature `Linearity * Density`, we explicitly give the model this pattern.
 
-### 🛠️ OPERATIONS
+### ≡ƒ¢á∩╕Å OPERATIONS
 1. **Pairwise Math:** For every pair (A, B), calculate:
    - Sum (A + B)
    - Difference (A - B)
    - Ratio (A / B) (with epsilon safety)
 2. **Polynomial:** Calculate Products (A * B) using sklearn.
 
-### 📦 OUTPUT
+### ≡ƒôª OUTPUT
 - Saves `data_track_4E_Full_Expansion_expanded.npz` containing the expanded dataset.
-────────────────────────────────────────────────────────────────────────────────
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 """
 
 import os
@@ -35,13 +35,13 @@ import numpy as np
 from typing import Tuple, List
 from sklearn.preprocessing import PolynomialFeatures
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 📝 CONFIGURATION
-# ──────────────────────────────────────────────────────────────────────────────
+# ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ≡ƒô¥ CONFIGURATION
+# ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 📝 CONFIGURATION
-# ──────────────────────────────────────────────────────────────────────────────
+# ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ≡ƒô¥ CONFIGURATION
+# ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 try:
     from config import MODEL_READY_DATA_FILE, EXPANDED_DATA_FILE, FEATURE_SELECTION_DIR, COMBINATION_DEGREE, INCLUDE_BIAS
@@ -51,19 +51,19 @@ except ImportError:
     from config import MODEL_READY_DATA_FILE, EXPANDED_DATA_FILE, FEATURE_SELECTION_DIR, COMBINATION_DEGREE, INCLUDE_BIAS
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 1️⃣ HELPER FUNCTIONS
-# ──────────────────────────────────────────────────────────────────────────────
+# ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# 1∩╕ÅΓâú HELPER FUNCTIONS
+# ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 def load_model_ready_data(path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, List[str]]:
     """
     Loads the balanced training data and locked test data from Stage 3.
     Dynamically extracts feature names to avoid hardcoding.
     """
-    print(f"📂 Loading data from: {path}")
+    print(f"≡ƒôé Loading data from: {path}")
     
     if not os.path.exists(path):
-        print(f"❌ ERROR: File not found at {path}")
+        print(f"Γ¥î ERROR: File not found at {path}")
         sys.exit(1)
 
     try:
@@ -86,7 +86,7 @@ def load_model_ready_data(path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray
             return X_train, X_test, y_train, y_test, feature_names
             
     except KeyError as e:
-        print(f"❌ ERROR: Missing key in NPZ file: {e}")
+        print(f"Γ¥î ERROR: Missing key in NPZ file: {e}")
         print("   Did you run 'data_preprocessor.py' (Stage 3) correctly?")
         sys.exit(1)
 
@@ -118,26 +118,16 @@ def generate_math_combinations(X: np.ndarray, feature_names: List[str]) -> Tuple
             - The new array of combined features.
             - A list of names for the new features (e.g., 'density_MEAN_PLUS_geom_area').
     """
-
-    """
-    Generates Sum and Difference features.
-    
-    ❌ REMOVED: Ratio (A/B)
-    Reason: Input X is Z-Scored (Standardized). Denominators cross 0, causing
-    mathematical explosion and physically meaningless features.
-    """
     n_features = X.shape[1]
-    
-    # Pre-allocate output array to prevent memory fragmentation
-    # Count pairs: n*(n-1)/2. Multiply by 2 operations (Sum, Diff)
-    n_pairs = (n_features * (n_features - 1)) // 2
-    n_new_features = n_pairs * 2
-    
-    X_new = np.zeros((X.shape[0], n_new_features), dtype=np.float32)
+    X_new = []
     names_new = []
     
-    col_idx = 0
+    # Cast to float32 to conserve memory during massive expansion
+    X = X.astype(np.float32)
+    epsilon = 1e-6  # Prevent division by zero
+
     # Iterate over unique pairs (i < j)
+    count = 0
     for i in range(n_features):
         for j in range(i + 1, n_features):
             f_i = X[:, i]
@@ -146,17 +136,25 @@ def generate_math_combinations(X: np.ndarray, feature_names: List[str]) -> Tuple
             name_j = feature_names[j]
 
             # 1. Sum
-            X_new[:, col_idx] = f_i + f_j
+            X_new.append(f_i + f_j)
             names_new.append(f'{name_i}_PLUS_{name_j}')
-            col_idx += 1
 
             # 2. Difference
-            X_new[:, col_idx] = f_i - f_j
+            X_new.append(f_i - f_j)
             names_new.append(f'{name_i}_MINUS_{name_j}')
-            col_idx += 1
             
-    print(f"   Math Ops: Generated {X_new.shape[1]} features (Sum/Diff).")
-    return X_new, names_new
+            # 3. Ratio
+            X_new.append(f_i / (f_j + epsilon))
+            names_new.append(f'{name_i}_DIV_{name_j}')
+            
+            count += 1
+
+    # Stack all new columns efficiently
+    X_combined_math = np.column_stack(X_new)
+    
+    print(f"   Math Ops: Generated {X_combined_math.shape[1]} features (from {count} pairs).")
+    return X_combined_math, names_new
+
 
 def safe_feature_expansion(
     X_train: np.ndarray, 
@@ -184,16 +182,16 @@ def safe_feature_expansion(
             - Full list of feature names.
     """
     print("\n" + "="*50)
-    print(f"✨ STARTING FEATURE EXPANSION")
+    print(f"Γ£¿ STARTING FEATURE EXPANSION")
     print("="*50)
     
     # --- 1. Math Combinations ---
-    print("👉 Phase 1: Custom Math Combinations (+, -, /)...")
+    print("≡ƒæë Phase 1: Custom Math Combinations (+, -, /)...")
     X_train_math, names_math = generate_math_combinations(X_train, feature_names)
     X_test_math, _ = generate_math_combinations(X_test, feature_names) 
 
     # --- 2. Polynomial Combinations ---
-    print("👉 Phase 2: Polynomial Interactions (Product *)...")
+    print("≡ƒæë Phase 2: Polynomial Interactions (Product *)...")
     poly = PolynomialFeatures(
         degree=COMBINATION_DEGREE, 
         include_bias=INCLUDE_BIAS, 
@@ -213,7 +211,7 @@ def safe_feature_expansion(
 
     # --- 3. Concatenation ---
     # Combine: [Original, Math, Poly]
-    print("👉 Phase 3: Stacking Features...")
+    print("≡ƒæë Phase 3: Stacking Features...")
     X_train_expanded = np.column_stack([X_train.astype(np.float32), X_train_math, X_train_poly])
     X_test_expanded = np.column_stack([X_test.astype(np.float32), X_test_math, X_test_poly])
     
@@ -222,9 +220,9 @@ def safe_feature_expansion(
     return X_train_expanded, X_test_expanded, all_feature_names
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 2️⃣ MAIN EXECUTION
-# ──────────────────────────────────────────────────────────────────────────────
+# ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# 2∩╕ÅΓâú MAIN EXECUTION
+# ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 if __name__ == '__main__':
     
@@ -244,7 +242,7 @@ if __name__ == '__main__':
 
     # 3. Report Results
     print("\n" + "="*50)
-    print(f"✅ EXPANSION COMPLETE")
+    print(f"Γ£à EXPANSION COMPLETE")
     print(f"   Original Features: {len(base_feature_names)}")
     print(f"   Final Features:    {X_train_exp.shape[1]}")
     print(f"   Train Shape:       {X_train_exp.shape}")
@@ -252,7 +250,7 @@ if __name__ == '__main__':
     print("="*50)
 
     # 4. Save
-    print(f"💾 Saving to {output_path}...")
+    print(f"≡ƒÆ╛ Saving to {output_path}...")
     np.savez_compressed(
         output_path,
         X_train=X_train_exp,
@@ -261,13 +259,13 @@ if __name__ == '__main__':
         y_test=y_test,
         feature_names=np.array(full_feature_names)
     )
-    print("✅ File Saved Successfully.")
+    print("Γ£à File Saved Successfully.")
     
     
     
 """
 Unique Pairs Explanation
-────────────────────────────────────────────────────────
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 A *unique pair* refers to a combination of two feature columns
 where order does NOT matter. For example, the pair (A, B) is
 considered the same as (B, A), so only one of them is generated.
@@ -281,9 +279,9 @@ If there are n features, the number of unique pairs is:
     n(n - 1) / 2
 
 Example:
-For 66 features → 66 × 65 / 2 = 2145 unique pairs.
+For 66 features ΓåÆ 66 ├ù 65 / 2 = 2145 unique pairs.
 
 Using unique pairs prevents feature explosion, avoids redundant
 computation, and keeps polynomial feature expansion efficient.
-────────────────────────────────────────────────────────
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 """
