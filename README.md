@@ -11,11 +11,10 @@ This project is designed to be easily reproducible, leveraging **GitHub Codespac
 ```text
 .
 ├── .devcontainer/            # GitHub Codespaces configuration
-├── ml_flow/                  # Main pipeline directory
-│   ├── datasets/             # Target directory for LSWMD.pkl (gitignored)
-│   ├── src/                  # Source code (preprocessing, modeling, etc.)
-│   ├── run_all.py            # Master script to execute the pipeline
-│   └── requirements.txt      # Python dependencies
+├── ml_flow/                  # Pipeline source code (preprocessing, modeling, etc.)
+├── datasets/                 # Target directory for LSWMD.pkl (gitignored)
+├── run_all.py                # Master script to execute the pipeline
+├── requirement.txt           # Python dependencies
 └── README.md                 # Project documentation
 ```
 
@@ -25,7 +24,7 @@ If you are using GitHub Codespaces, no local setup is required! Everything is co
 
 If you prefer to run this locally, ensure you have:
 
-*   **Python 3.8+**
+*   **Python 3.9 - 3.12** (Note: Python 3.13+ is not yet compatible)
 *   `pip` and `virtualenv`
 *   A **Kaggle** account (if you wish to use the Kaggle API for dataset downloads)
 
@@ -51,8 +50,8 @@ You can either manually download the dataset or use the Kaggle API.
 2.  Place it inside your workspace by running the following in the Codespace terminal:
 
 ```bash
-mkdir -p ml_flow/datasets
-mv ~/Downloads/LSWMD.pkl ml_flow/datasets/
+mkdir -p datasets
+mv ~/Downloads/LSWMD.pkl datasets/
 ```
 
 #### Option B: Automatic Download (Requires Kaggle API token)
@@ -69,19 +68,19 @@ chmod 600 ~/.kaggle/kaggle.json
 
 ```bash
 pip install kaggle
-mkdir -p ml_flow/datasets
-kaggle datasets download -d qingyi/wm811k-wafer-map -p ml_flow/datasets
-unzip ml_flow/datasets/wm811k-wafer-map.zip -d ml_flow/datasets/
+mkdir -p datasets
+kaggle datasets download -d qingyi/wm811k-wafer-map -p datasets
+unzip datasets/wm811k-wafer-map.zip -d datasets/
 ```
 
-> **⚠️ Important:** Ensure the dataset file is extracted properly. The `LSWMD.pkl` file must be located exactly at: `ml_flow/datasets/LSWMD.pkl`
+> **⚠️ Important:** Ensure the dataset file is extracted properly. The `LSWMD.pkl` file must be located exactly at: `datasets/LSWMD.pkl`
 
 ### 3. Run the ML Pipeline
 
 Once the dataset is in place, simply run:
 
 ```bash
-python ml_flow/run_all.py
+python run_all.py
 ```
 
 > **Note:** The script will handle the final environment setup, dependency installation, and execution of all pipeline stages automatically.
@@ -98,8 +97,10 @@ When you execute `run_all.py`, the script triggers the following sequence:
 
 ## 📊 Outputs & Results
 
-After a successful run, check the `ml_flow/outputs/` directory (created automatically). It will contain:
+After a successful run, results are available in the following directories:
 
-*   Trained model weights (`.h5` or `.pkl`)
-*   Evaluation metrics (`metrics.json`)
-*   Visualizations of the confusion matrix and loss curves.
+*   `data_loader_results/` - Cleaned wafer maps
+*   `Feature_engineering_results/` - Extracted features
+*   `preprocessing_results/` - Preprocessed data
+*   `feature_selection_results/` - Selected features
+*   `model_artifacts/` - **Master leaderboard**, trained models, confusion matrices, ROC curves.
