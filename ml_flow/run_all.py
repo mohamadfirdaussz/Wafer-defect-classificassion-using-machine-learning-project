@@ -138,11 +138,10 @@ def install_dependencies():
     # Upgrade pip first
     try:
         subprocess.run(
-            [str(venv_python), "-m", "pip", "install", "--upgrade", "pip", "--quiet"],
-            check=True,
-            capture_output=True,
-            text=True
-        )
+        [str(venv_python), "-m", "pip", "install", "-r", str(req_file)],
+        check=True
+    )
+
     except subprocess.CalledProcessError:
         log("Warning: Could not upgrade pip", "WARN")
     
