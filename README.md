@@ -24,7 +24,7 @@ If you are using GitHub Codespaces, no local setup is required! Everything is co
 
 If you prefer to run this locally, ensure you have:
 
-*   **Python 3.9 - 3.12** (Note: Python 3.13+ is not yet compatible)
+*   **Python 3.9 - 3.11** (Note: Python 3.13+ is not yet compatible)
 *   `pip` and `virtualenv`
 *   A **Kaggle** account (if you wish to use the Kaggle API for dataset downloads)
 
