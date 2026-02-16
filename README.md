@@ -183,104 +183,112 @@ Wafer-defect-classificassion-using-machine-learning-project/
 ├── Feature_engineering_results/          # Stage 2 output
 ├── preprocessing_results/                # Stage 3 output
 ├── feature_selection_results/            # Stage 4 output
-├── model_artifacts/                      # Stage 5 output (models + metrics)
-│
-├── setup.bat                             # 🆕 One-click setup (Windows)
-├── setup.py                              # 🆕 Cross-platform setup script
-├── run_pipeline.bat                      # 🆕 Enhanced pipeline launcher
-├── create_distribution.bat               # 🆕 Create distribution package (Windows)
-├── create_distribution.py                # 🆕 Create distribution package (Cross-platform)
-├── QUICK_START.md                        # 🆕 Quick start guide
-├── requirement.txt                       # Python dependencies
-└── README.md                             # This file
-```
+├── model_artifacts/                      # 🏭 Wafer Map Defect Classification Pipeline
+
+An automated end-to-end Machine Learning pipeline for classifying semiconductor defect patterns using the **WM-811K Wafer Map** dataset. 
+
+This project is designed to be easily reproducible, leveraging **GitHub Codespaces** and a modular script architecture so you can go from raw dataset to trained models with a single command.
 
 ---
 
+## 🗂️ Project Structure
 
-## How to Run
-
-### Option 1: One-Click Execution ⚡ (Windows - Recommended)
-
-**First Time Setup:**
-```
-Double-click: setup.bat
-```
-
-**Run Pipeline:**
-```
-Double-click: run_pipeline.bat
+```text
+.
+├── .devcontainer/            # GitHub Codespaces configuration
+├── ml_flow/                  # Main pipeline directory
+│   ├── datasets/             # Target directory for LSWMD.pkl (gitignored)
+│   ├── src/                  # Source code (preprocessing, modeling, etc.)
+│   ├── run_all.py            # Master script to execute the pipeline
+│   └── requirements.txt      # Python dependencies
+└── README.md                 # Project documentation
 ```
 
-The scripts will automatically:
-1. ✅ Verify Python installation and version (3.9 - 3.12)
-2. ✅ Create and activate virtual environment
-3. ✅ Install all dependencies from `requirement.txt`
-4. ✅ Execute all 5 pipeline stages sequentially
-5. ✅ Generate results in organized output directories
-6. ✅ Display results summary and locations
+## 📋 Prerequisites
 
-### Option 2: Cross-Platform Execution (Linux/macOS/Windows)
+If you are using GitHub Codespaces, no local setup is required! Everything is containerized.
 
-**Setup:**
-```bash
-python setup.py
-```
+If you prefer to run this locally, ensure you have:
 
-**Run Pipeline:**
-```bash
-python ml_flow/main.py
-```
+*   **Python 3.8+**
+*   `pip` and `virtualenv`
+*   A **Kaggle** account (if you wish to use the Kaggle API for dataset downloads)
 
-### Option 3: Manual Execution (All Platforms)
+## 🚀 Quick Start (GitHub Codespaces)
 
-Run the master controller:
-```bash
-# Activate virtual environment first
-.venv\Scripts\activate  # Windows
-source .venv/bin/activate  # Linux/Mac
+You can run the entire pipeline in **GitHub Codespaces** with almost no setup.
 
-# Run pipeline
-python ml_flow/main.py
-```
+### 1. Open in Codespace
 
-### Option 4: Run Individual Stages (For Debugging)
+Navigate to your repository: [https://github.com/mohamadfirdaussz/Wafer-defect-classificassion-using-machine-learning-project](https://github.com/mohamadfirdaussz/Wafer-defect-classificassion-using-machine-learning-project)
 
+Click **Code** → **Codespaces** → **Create Codespace on main**.
+
+Wait a moment: The Codespace will automatically build the devcontainer and install dependencies.
+
+### 2. Download Dataset (Kaggle)
+
+You can either manually download the dataset or use the Kaggle API.
+
+#### Option A: Manual Download
+
+1.  Download `LSWMD.pkl` from Kaggle: [WM-811K Wafer Map](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map).
+2.  Place it inside your workspace by running the following in the Codespace terminal:
 
 ```bash
-cd ml_flow
-
-# Stage 1: Clean and denoise data
-python data_loader.py
-
-# Stage 2: Extract features
-python feature_engineering.py
-
-# Stage 3: Preprocess and balance
-python data_preprocessor.py
-
-# Stage 3.5: Expand features
-python feature_combination.py
-
-# Stage 4: Select features
-python feature_selection.py
-
-# Stage 5: Train models
-python model_tuning.py
+mkdir -p ml_flow/datasets
+mv ~/Downloads/LSWMD.pkl ml_flow/datasets/
 ```
 
-### Expected Output
+#### Option B: Automatic Download (Requires Kaggle API token)
 
-After completion, you'll find results in:
-- `data_loader_results/` - Cleaned wafer maps
-- `Feature_engineering_results/` - Extracted features
-- `preprocessing_results/` - Preprocessed data
-- `feature_selection_results/` - Selected features (3 tracks)
-- `model_artifacts/` - **Master leaderboard** (`master_model_comparison.csv`), trained models, confusion matrices, ROC curves
+1.  Upload your Kaggle API token (`kaggle.json`) to the Codespace and set the correct permissions:
 
----
+```bash
+mkdir -p ~/.kaggle
+cp /path/to/kaggle.json ~/.kaggle/
+chmod 600 ~/.kaggle/kaggle.json
+```
 
-## 📦 Creating Distribution Package
+2.  Run the following commands to install the Kaggle CLI, download, and unzip the dataset:
+
+```bash
+pip install kaggle
+mkdir -p ml_flow/datasets
+kaggle datasets download -d qingyi/wm811k-wafer-map -p ml_flow/datasets
+unzip ml_flow/datasets/wm811k-wafer-map.zip -d ml_flow/datasets/
+```
+
+> **⚠️ Important:** Ensure the dataset file is extracted properly. The `LSWMD.pkl` file must be located exactly at: `ml_flow/datasets/LSWMD.pkl`
+
+### 3. Run the ML Pipeline
+
+Once the dataset is in place, simply run:
+
+```bash
+python ml_flow/run_all.py
+```
+
+> **Note:** The script will handle the final environment setup, dependency installation, and execution of all pipeline stages automatically.
+
+## ⚙️ Pipeline Stages
+
+When you execute `run_all.py`, the script triggers the following sequence:
+
+1.  **Data Loading & Validation**: Verifies `LSWMD.pkl` exists and loads the raw pickle file into a pandas DataFrame.
+2.  **Preprocessing**: Cleans the data, handles missing values, and applies necessary transformations (e.g., resizing maps, filtering unlabelled data).
+3.  **Feature Engineering**: Extracts relevant spatial features from the wafer maps.
+4.  **Model Training**: Trains the baseline classification models on the processed dataset.
+5.  **Evaluation**: Generates performance metrics (Accuracy, F1-Score, Confusion Matrix) and saves them in the outputs directory.
+
+## 📊 Outputs & Results
+
+After a successful run, check the `ml_flow/outputs/` directory (created automatically). It will contain:
+
+*   Trained model weights (`.h5` or `.pkl`)
+*   Evaluation metrics (`metrics.json`)
+*   Visualizations of the confusion matrix and loss curves.
+
 
 Want to share this project with others? Create a complete package:
 
