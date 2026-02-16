@@ -75,10 +75,26 @@ chmod 600 ~/.kaggle/kaggle.json
 2.  Run the following commands to install the Kaggle CLI, download, and unzip the dataset:
 
 ```bash
-pip install kaggle
-mkdir -p datasets
-kaggle datasets download -d qingyi/wm811k-wafer-map -p datasets
-unzip datasets/wm811k-wafer-map.zip -d datasets/
+# 1️⃣ Install Kaggle CLI if not installed
+pip install --upgrade pip
+pip install kaggle --quiet
+
+# 2️⃣ Create dataset directory inside your project
+mkdir -p ml_flow/datasets
+
+# 3️⃣ Download the WM-811K dataset using Kaggle CLI
+kaggle datasets download -d qingyi/wm811k-wafer-map -p ml_flow/datasets --force
+
+# 4️⃣ Unzip the downloaded dataset directly into ml_flow/datasets
+unzip -o ml_flow/datasets/wm811k-wafer-map.zip -d ml_flow/datasets/
+
+# 5️⃣ Optional: remove the zip file to save space
+rm ml_flow/datasets/wm811k-wafer-map.zip
+
+# ✅ Verify the dataset
+ls ml_flow/datasets
+# You should see: LSWMD.pkl
+
 ```
 
 > **⚠️ Important:** Ensure the dataset file is extracted properly. The `LSWMD.pkl` file must be located exactly at: `datasets/LSWMD.pkl`

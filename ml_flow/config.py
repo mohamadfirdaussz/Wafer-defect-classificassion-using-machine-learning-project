@@ -24,7 +24,7 @@ PROJECT_ROOT = BASE_DIR.parent
 # Input Data Path
 # LOGIC: Check project "datasets" folder first for portability.
 # If not found, fall back to the original hardcoded path (for backward compatibility).
-RELATIVE_DATA_PATH = PROJECT_ROOT / "datasets" / "LSWMD.pkl"
+RELATIVE_DATA_PATH = BASE_DIR / "datasets" / "LSWMD.pkl"
 HARDCODED_DATA_PATH = Path(r"C:\Users\user\OneDrive - ums.edu.my\FYP 1\datasets\LSWMD.pkl")
 
 if RELATIVE_DATA_PATH.exists():
