@@ -2,7 +2,7 @@
 
 An automated end-to-end Machine Learning pipeline for classifying semiconductor defect patterns using the **WM-811K Wafer Map** dataset. 
 
-This project is designed to be easily reproducible, leveraging **GitHub Codespaces** and a modular script architecture so you can go from raw dataset to trained models with a single command. The pipeline is built as a strict **Directed Acyclic Graph (DAG)**, ensuring data integrity at every stage.
+This project is designed to be easily reproducible, leveraging **GitHub Codespaces** and a modular script architecture so you can go from raw dataset to trained models with a single command. 
 
 ---
 
