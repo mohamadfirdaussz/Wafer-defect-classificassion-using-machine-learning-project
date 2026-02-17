@@ -32,120 +32,118 @@ This project is designed to be easily reproducible, leveraging **GitHub Codespac
 ✅ **No local setup required!** Everything runs in the cloud.
 
 ### For Local Execution
-If you prefer to run locally, ensure you have:
 *   **Python 3.9 - 3.11** (⚠️ Python 3.12+ has compatibility issues with some ML libraries)
 *   `pip` package manager
 *   A **Kaggle** account for dataset access
 
 ---
 
-## 🚀 Quick Start: One-Click Execution
+## 🚀 Quick Start: Two-Command Execution
 
-### ⭐ Option 1: GitHub Codespaces (Easiest)
+### ⭐ GitHub Codespaces (Recommended)
 
-Perfect for running the entire pipeline without installing anything locally!
+Perfect for running the entire pipeline without any local installation!
 
 #### **Step 1: Launch Codespace**
 
-1. Go to the repository: [Wafer Defect Classification](https://github.com/mohamadfirdaussz/Wafer-defect-classificassion-using-machine-learning-project)
-2. Click the green **`<> Code`** button
-3. Select the **Codespaces** tab
-4. Click **Create codespace on main**
+1. Go to: [github.com/mohamadfirdaussz/Wafer-defect-classificassion-using-machine-learning-project](https://github.com/mohamadfirdaussz/Wafer-defect-classificassion-using-machine-learning-project)
+2. Click **`<> Code`** → **Codespaces** → **Create codespace on main**
+3. Wait ~2-3 minutes while it auto-installs dependencies
 
-> ⏱️ The Codespace will initialize automatically (takes ~2-3 minutes on first launch)
+✅ When ready, you'll see a welcome message in the terminal.
 
-#### **Step 2: Download Dataset from Kaggle**
+#### **Step 2: Get Kaggle Credentials**
 
-You have two options to get the dataset:
+The dataset requires Kaggle authentication. Choose **ONE** method:
 
-##### 📥 Method A: Kaggle API (Automated - Recommended)
+<details>
+<summary><b>Method A: Upload kaggle.json (Easiest)</b></summary>
 
-1. **Get your Kaggle API credentials:**
-   - Go to [kaggle.com](https://www.kaggle.com)
-   - Click on your profile picture (top right) → **Settings**
-   - Scroll to **API** section → Click **Create New Token**
-   - This downloads `kaggle.json` to your computer
+1. **Get your Kaggle API token:**
+   - Go to [kaggle.com/settings](https://www.kaggle.com/settings)
+   - Scroll to **API** section
+   - Click **Create New Token**
+   - This downloads `kaggle.json`
 
 2. **Upload to Codespace:**
-   - In VS Code (Codespace), right-click the Explorer panel
-   - Click **Upload...** and select your `kaggle.json` file
-   - Or drag and drop `kaggle.json` into the VS Code file explorer
+   - Drag and drop `kaggle.json` into the VS Code file explorer (repo root)
 
-3. **Run the download script in the terminal:**
+</details>
+
+<details>
+<summary><b>Method B: Use Codespace Secret (More Secure)</b></summary>
+
+1. **Get your Kaggle API token:**
+   - Go to [kaggle.com/settings](https://www.kaggle.com/settings)
+   - Scroll to **API** section
+   - Click **Create New Token**
+   - Open `kaggle.json` in a text editor
+
+2. **Create Codespace secret:**
+   - Go to your GitHub repo → **Settings** → **Secrets and variables** → **Codespaces**
+   - Click **New repository secret**
+   - Name: `KAGGLE_JSON`
+   - Value: Paste the **entire contents** of `kaggle.json`
+   - Click **Add secret**
+
+3. **Rebuild Codespace:**
+   - Click Codespace name (bottom-left) → **Rebuild Container**
+
+</details>
+
+#### **Step 3: Download Dataset**
+
+Run this single command (works with either method above):
 
 ```bash
-# Set up Kaggle credentials
-mkdir -p ~/.kaggle
-mv kaggle.json ~/.kaggle/
-chmod 600 ~/.kaggle/kaggle.json
-
-# Install Kaggle CLI
-pip install kaggle
-
-# Create dataset directory
-mkdir -p ml_flow/datasets
-
-# Download dataset
-kaggle datasets download -d qingyi/wm811k-wafer-map -p ml_flow/datasets
-
-# Extract dataset
-unzip ml_flow/datasets/wm811k-wafer-map.zip -d ml_flow/datasets/
-rm ml_flow/datasets/wm811k-wafer-map.zip
-
-# Verify dataset is present
-ls -lh ml_flow/datasets/LSWMD.pkl
+bash scripts/download_dataset.sh
 ```
 
-✅ You should see `LSWMD.pkl` (~150 MB)
+✅ The script automatically detects your Kaggle credentials and downloads the dataset (~150 MB).
 
-##### 📥 Method B: Manual Upload
-
-1. Download `LSWMD.pkl` from [Kaggle WM-811K dataset](https://www.kaggle.com/datasets/qingyi/wm811k-wafer-map)
-2. In Codespace, create the directory: `mkdir -p ml_flow/datasets`
-3. Drag and drop `LSWMD.pkl` into the `ml_flow/datasets/` folder in VS Code
-
-#### **Step 3: Run the Pipeline (One Command!)**
-
-Once the dataset is in place, simply run:
+#### **Step 4: Run Pipeline**
 
 ```bash
 python run_all.py
 ```
 
-🎉 **That's it!** The script will:
-- ✅ Check Python version compatibility
-- ✅ Verify dataset exists
-- ✅ Install all dependencies automatically
-- ✅ Execute the entire ML pipeline (6 stages)
+🎉 **Done!** The pipeline will execute all 6 stages automatically.
 
-> ⏱️ **Estimated runtime:** 10-30 minutes depending on hardware
+> ⏱️ **Runtime:** 10-30 minutes depending on machine type
 > 
-> 💡 **Tip:** In Codespaces, you can use a 4-core or 8-core machine for faster execution (click the Codespace name at bottom-left → Change machine type)
+> 💡 **Tip:** Use a 4-core or 8-core Codespace for faster execution  
+> (Click Codespace name → **Change machine type**)
 
 ---
 
-### 🖥️ Option 2: Local Execution
+### 🖥️ Local Execution
 
-#### **Step 1: Clone the Repository**
+#### **Step 1: Clone Repository**
 
 ```bash
 git clone https://github.com/mohamadfirdaussz/Wafer-defect-classificassion-using-machine-learning-project.git
 cd Wafer-defect-classificassion-using-machine-learning-project
 ```
 
-#### **Step 2: Download Dataset from Kaggle**
+#### **Step 2: Get Kaggle Credentials**
 
-Follow the same instructions as **Codespaces Step 2** above, using your local terminal.
+Follow **Step 2** from Codespaces instructions above (Method A recommended for local).
 
-Alternatively, manually place `LSWMD.pkl` in `ml_flow/datasets/`.
+#### **Step 3: Download Dataset**
 
-#### **Step 3: Run the Pipeline**
+```bash
+bash scripts/download_dataset.sh
+```
+
+Or manually place `LSWMD.pkl` in `ml_flow/datasets/`.
+
+#### **Step 4: Run Pipeline**
 
 ```bash
 python run_all.py
 ```
 
-> **Note:** The `run_all.py` script handles environment setup automatically!
+> **Note:** `run_all.py` automatically installs dependencies from `ml_flow/requirement.txt`
 
 ## ⚙️ How It Works: The Pipeline Stages
 
