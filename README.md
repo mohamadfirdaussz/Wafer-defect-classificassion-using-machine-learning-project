@@ -52,46 +52,11 @@ Perfect for running the entire pipeline without any local installation!
 
 ✅ When ready, you'll see a welcome message in the terminal.
 
-#### **Step 2: Get Kaggle Credentials**
-
-The dataset requires Kaggle authentication. Choose **ONE** method:
-
-<details>
-<summary><b>Method A: Upload kaggle.json (Easiest)</b></summary>
-
-1. **Get your Kaggle API token:**
-   - Go to [kaggle.com/settings](https://www.kaggle.com/settings)
-   - Scroll to **API** section
-   - Click **Create New Token**
-   - This downloads `kaggle.json`
-
-2. **Upload to Codespace:**
-   - Drag and drop `kaggle.json` into the VS Code file explorer (repo root)
+#### 
 
 </details>
 
-<details>
-<summary><b>Method B: Use Codespace Secret (More Secure)</b></summary>
-
-1. **Get your Kaggle API token:**
-   - Go to [kaggle.com/settings](https://www.kaggle.com/settings)
-   - Scroll to **API** section
-   - Click **Create New Token**
-   - Open `kaggle.json` in a text editor
-
-2. **Create Codespace secret:**
-   - Go to your GitHub repo → **Settings** → **Secrets and variables** → **Codespaces**
-   - Click **New repository secret**
-   - Name: `KAGGLE_JSON`
-   - Value: Paste the **entire contents** of `kaggle.json`
-   - Click **Add secret**
-
-3. **Rebuild Codespace:**
-   - Click Codespace name (bottom-left) → **Rebuild Container**
-
-</details>
-
-#### **Step 3: Download Dataset**
+#### **Step 2: Download Dataset**
 
 Run this single command (works with either method above):
 
@@ -101,7 +66,7 @@ bash scripts/download_dataset.sh
 
 ✅ The script automatically detects your Kaggle credentials and downloads the dataset (~150 MB).
 
-#### **Step 4: Run Pipeline**
+#### **Step 3: Run Pipeline**
 
 ```bash
 python run_all.py
