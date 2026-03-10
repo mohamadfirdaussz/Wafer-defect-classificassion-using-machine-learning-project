@@ -193,6 +193,49 @@ def plot_multiclass_roc(model: Any, X_test: np.ndarray, y_test: np.ndarray, save
     plt.savefig(save_path, dpi=300)
     plt.close()
 
+def plot_model_comparison_bar(summary_df, save_path):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # Pivot table
+    pivot = summary_df.pivot(index="Model", columns="Track", values="Test_F1_Macro")
+
+    # Desired model order
+    model_order = [
+        "SVM",
+        "LogisticReg",
+        "KNN",
+        "GradBoosting",
+        "XGBoost",
+        "RandomForest",
+        "DecisionTree"
+    ]
+
+    # Reorder rows
+    pivot = pivot.reindex(model_order)
+
+    models = pivot.index.tolist()
+    tracks = pivot.columns.tolist()
+
+    x = np.arange(len(models))
+    width = 0.25
+
+    plt.figure(figsize=(10,6))
+
+    for i, track in enumerate(tracks):
+        plt.bar(x + i*width, pivot[track], width, label=track)
+
+    plt.xticks(x + width, models)
+    plt.xlabel("Machine Learning Models")
+    plt.ylabel("Macro F1-Score")
+    plt.title("Model Performance Across Feature Selection Tracks")
+
+    plt.legend(title="Feature Tracks")
+    plt.grid(axis="y", linestyle="--", alpha=0.5)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300)
+    plt.close()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2️⃣ EVALUATION WRAPPER
@@ -422,6 +465,31 @@ if __name__ == "__main__":
         # Display ALL results
         print(summary_df[cols].to_string(index=False))
         
+          # ─────────────────────────────────────────────────────────────
+        # ⭐ BEST MODEL PER TRACK
+        # ─────────────────────────────────────────────────────────────
+        best_per_track = (
+            summary_df
+            .sort_values(by="Test_F1_Macro", ascending=False)
+            .groupby("Track")
+            .first()
+            .reset_index()
+        )
+
+        print("\n" + "="*70)
+        print("🥇 BEST MODEL PER TRACK")
+        print("="*70)
+
+        cols = ['Track', 'Model', 'Test_F1_Macro', 'Test_Recall_Macro', 'Overfit_Gap', 'Test_Accuracy']
+        print(best_per_track[cols].to_string(index=False))
+
+        # Save best-per-track results
+        best_track_path = os.path.join(save_dir, "best_model_per_track.csv")
+        best_per_track.to_csv(best_track_path, index=False)
+
+        print(f"\n💾 Best-per-track results saved to: {best_track_path}")
+        
+
         # Identify Winner
         best_row = summary_df.iloc[0]
         print("\n" + "="*70)
@@ -431,7 +499,37 @@ if __name__ == "__main__":
         print("="*70)
         
         summary_path = os.path.join(save_dir, "master_model_comparison.csv")
+        bar_chart_path = os.path.join(save_dir, "model_performance_comparison.png")
+        plot_model_comparison_bar(summary_df, bar_chart_path)
+        print(f"Bar chart saved to: {bar_chart_path}")
         summary_df.to_csv(summary_path, index=False)
+        # ─────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────
+# Create CSV for Bar Chart with fixed model order
+# ─────────────────────────────────────────────
+        barchart_df = summary_df.pivot(
+    index="Model",
+    columns="Track",
+    values="Test_F1_Macro"
+)
+
+        model_order = [
+            "SVM",
+            "LogisticReg",
+            "KNN",
+            "GradBoosting",
+            "XGBoost",
+            "RandomForest",
+            "DecisionTree"
+                    ]
+
+        barchart_df = barchart_df.reindex(model_order).reset_index()
+
+        barchart_csv_path = os.path.join(save_dir, "barchart_model_performance.csv")
+        barchart_df.to_csv(barchart_csv_path, index=False)
+
+        print(f"\n📊 Bar chart CSV saved to: {barchart_csv_path}")
         print(f"\n💾 Full results saved to: {summary_path}")
 
 
